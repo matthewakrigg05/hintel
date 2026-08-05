@@ -1,0 +1,30 @@
+name: Branch Rules
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  validate-branches:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Validate merge rules
+        run: |
+          BASE="${{ github.base_ref }}"
+          HEAD="${{ github.head_ref }}"
+
+          echo "Base: $BASE"
+          echo "Head: $HEAD"
+
+          # master rules
+          if [[ "$BASE" == "master" ]]; then
+            if [[ "$HEAD" != "dev" && ! "$HEAD" =~ ^hotfix/ ]]; then
+              echo "Only dev or hotfix/* can merge into master"
+              exit 1
+            fi
+          fi
+
+          # master is protected: no direct commits to master
+          # Only dev or hotfix/* branches are allowed to merge into master
+          # everything else should be merged into dev first
