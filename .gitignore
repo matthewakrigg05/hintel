@@ -1,1 +1,8 @@
 .env
+
+# Local data downloads for exploratory datasets
+/Exploration/**/datasets/
+/Exploration/**/data/
+/Exploration/**/profiles/
+/Exploration/ONS API/datasets/
+/Exploration/ONS API/profiles/
