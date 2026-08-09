@@ -2,7 +2,9 @@
 
 # Local data downloads for exploratory datasets
 /Exploration/**/datasets/
-/Exploration/**/data/
 /Exploration/**/profiles/
-/Exploration/ONS API/datasets/
-/Exploration/ONS API/profiles/
+/Exploration/**/full_summaries/
+
+# Notebook caches
+**/.ipynb_checkpoints/
+__pycache__/
