@@ -1,0 +1,37 @@
+==================== 2026-09-17T18:45:01.230006Z | 01a0b0af-b8ac-7850-bf58-ef32e5356136 ====================
+18:45:01.230160 [info ]: Installing dbt project and profile setup
+18:45:01.251858 [info ]: Info Created .vscode/extensions.json with dbt extension recommendation
+18:45:01.252116 [info ]: Success Project created successfully!
+18:45:01.252296 [info ]: Info Project name: jaffle_shop
+18:45:01.252374 [info ]: Info Project directory: jaffle_shop
+18:45:08.072017 [info ]: Info Setting up your profile...
+18:45:08.072814 [info ]: Loading ~/.dbt/profiles.yml
+18:45:08.074218 [info ]: Profile 'jaffle_shop' already exists. You can choose how to proceed.
+18:45:10.749460 [info ]: Info Creating new profile...
+18:47:41.125613 [info ]: Info Backup created at C:\Users\matth\.dbt\profiles.yml.bkp
+18:47:41.126562 [info ]: Success Profile written to C:\Users\matth\.dbt\profiles.yml
+18:47:41.126788 [info ]: Validating profile inputs, adapters, and connection
+
+18:47:41.126947 [info ]: dbt-fusion 2.0.0-preview.202
+18:47:41.127509 [info ]: Started loading project
+18:47:41.129250 [info ]: Loading ~/.dbt/profiles.yml
+18:47:41.138910 [info ]: Finished loading project [  0.01s]
+18:47:41.139106 [info ]: Started debugging
+18:47:41.139159 [info ]: Debugging profile: dev
+18:47:41.139234 [info ]: Debugging dbt version: 2.0.0-preview.202
+18:47:41.139312 [info ]: Debugging platform: windows x86_64 (windows)
+18:47:41.139400 [info ]: Debugging adapter type: databricks (remote)
+18:47:41.172157 [info ]: Debugging dependencies:
+  git: OK
+18:47:41.172360 [info ]: Debugging connection:
+  "schema": "h_intel",
+  "host": "dbc-ee36f327-a62f.cloud.databricks.com",
+  "http_path": "/sql/1.0/warehouses/e69a1adff13a30b3"
+18:47:57.173992 [debug]: Query executed on node unknown:
+select 1 as id
+18:47:57.174371 [info ]: Debugging connection test: OK
+18:47:57.174965 [info ]: Debugged All checks passed!
+18:47:57.175468 [info ]: Finished debugging [ 16.04s]
+18:47:57.612602 [info ]: 
+==================== Execution Summary =====================
+Finished 'init' successfully for target 'dev' [2m 56s]

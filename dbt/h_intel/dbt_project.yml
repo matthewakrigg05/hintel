@@ -1,0 +1,29 @@
+name: h_intel
+
+profile: h_intel
+
+seed-paths: ["seeds"]
+model-paths: ["models"]
+macro-paths: ["macros"]
+clean-targets:
+  - "target"
+  - "dbt_packages"
+
+seeds:
+  # Local seed data is kept in source-specific schemas in the bronze catalog.
+  h_intel:
+    land_registry:
+      +database: bronze
+      +schema: land_registry
+    ons:
+      +database: bronze
+      +schema: ons
+
+models:
+  h_intel:
+    +static_analysis: strict
+    # Materialize staging models as views, and marts as tables
+    staging:
+      +materialized: view
+    marts:
+      +materialized: table
