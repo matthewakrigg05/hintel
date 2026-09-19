@@ -1,11 +1,47 @@
+from datetime import date
 from pathlib import Path
 from urllib.parse import urlparse
+
+import requests
 
 from ingestion.common.download import download_file
 from ingestion.common.http import get_json
 from ingestion.common.storage import prepare_dataset_dir
 
 from .config import LAND_REGISTRY_API_KEY
+
+
+HPI_BASE_URL = (
+    "https://publicdata.landregistry.gov.uk/"
+    "market-trend-data/house-price-index-data"
+)
+
+
+def candidate_periods(lookback: int = 24):
+    """Yield HPI periods from the current month backwards."""
+    current_month = date.today().year * 12 + date.today().month - 1
+    for offset in range(lookback):
+        month_index = current_month - offset
+        year, month = divmod(month_index, 12)
+        yield f"{year:04d}-{month + 1:02d}"
+
+
+def discover_latest_url(filename: str, lookback: int = 24) -> tuple[str, str]:
+    """Find the newest published CSV for an HPI filename stem."""
+    for period in candidate_periods(lookback):
+        url = f"{HPI_BASE_URL}/{filename}-{period}.csv"
+        try:
+            response = requests.head(url, timeout=30, allow_redirects=True)
+            if response.status_code == 405:
+                response = requests.get(url, timeout=30, stream=True)
+            response.close()
+        except requests.RequestException:
+            continue
+
+        if response.status_code == 200:
+            return url, period
+
+    raise RuntimeError(f"No available HPI CSV found for {filename}")
 
 
 def auth_headers() -> dict[str, str]:

@@ -7,7 +7,7 @@ from ingestion.common.metadata import add_ingestion_metadata
 from ingestion.common.storage import prepare_dataset_dir
 
 from .config import LAND_REGISTRY_DATASETS
-from .downloads import save_downloaded_dataset
+from .downloads import discover_latest_url, save_downloaded_dataset
 
 
 def load_dataset_from_path(file_path: Path) -> pd.DataFrame:
@@ -63,14 +63,19 @@ def ingest_dataset(dataset: dict, download: bool = True) -> pd.DataFrame:
     dataframe regardless of whether it was freshly downloaded.
 
     Args:
-        dataset: Dataset configuration containing ``dataset_id`` and ``url``.
+        dataset: Dataset configuration containing ``dataset_id`` and ``filename``.
         download: Whether to download the source before loading it.
 
     Returns:
         The loaded dataframe with ingestion metadata columns.
     """
     dataset_id = dataset["dataset_id"]
-    raw_path = save_downloaded_dataset(dataset_id, dataset["url"]) if download else existing_raw_path(dataset_id)
+    if download:
+        source_url, period = discover_latest_url(dataset["filename"])
+        print(f"Using {period} for {dataset_id}")
+        raw_path = save_downloaded_dataset(dataset_id, source_url)
+    else:
+        raw_path = existing_raw_path(dataset_id)
     frame = load_dataset_from_path(raw_path)
     return add_ingestion_metadata(frame, {"_source_dataset": dataset_id, "_source_file": str(raw_path)})
 
