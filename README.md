@@ -169,6 +169,14 @@ The log records `success`, `skipped`, and `failed` outcomes. Use
 `--no-download` to reprocess the existing raw files without checking the
 Land Registry URLs.
 
+For durable monitoring, the pipeline also writes audit events to the Delta
+table `bronze.ingestion_runs` when Databricks is configured. Set
+`DATABRICKS_SERVER_HOSTNAME`, `DATABRICKS_HTTP_PATH`, and `DATABRICKS_TOKEN` in
+the runtime environment. Install the dependencies from `requirements.txt`.
+The table is created on demand and includes the shared pipeline `run_id`,
+dataset, publication period, status, row count, timestamps, and failure text.
+Local JSONL logging remains available when Databricks is unavailable.
+
 ## Data and insight philosophy
 
 The project prioritises:

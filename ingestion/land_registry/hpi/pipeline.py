@@ -1,15 +1,18 @@
 import argparse
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pandas as pd
 
 from ingestion.common.metadata import add_ingestion_metadata
 from ingestion.common.storage import prepare_dataset_dir
+from ingestion.destinations.databricks.audit import new_run_id, write_event
 
 from .config import LAND_REGISTRY_DATASETS
 from .downloads import (
     append_run_log,
     discover_latest_url,
+    get_dataset_manifest,
     is_download_current,
     save_downloaded_dataset,
 )
@@ -87,6 +90,7 @@ def ingest_dataset(dataset: dict, download: bool = True) -> pd.DataFrame:
     result = add_ingestion_metadata(frame, {"_source_dataset": dataset_id, "_source_file": str(raw_path)})
     result.attrs["hpi_period"] = period if download else None
     result.attrs["hpi_download_skipped"] = already_retrieved
+    result.attrs["hpi_manifest"] = get_dataset_manifest(dataset_id) or {}
     return result
 
 
@@ -103,24 +107,58 @@ def run_land_registry_all(download: bool = True) -> dict[str, pd.DataFrame]:
         A mapping from dataset identifier to loaded dataframe.
     """
     results = {}
+    run_id = new_run_id()
     for dataset in LAND_REGISTRY_DATASETS:
         dataset_id = dataset["dataset_id"]
         print(f"Processing {dataset_id}...")
         try:
             frame = ingest_dataset(dataset, download=download)
             results[dataset_id] = frame
+            status = "skipped" if frame.attrs.get("hpi_download_skipped", False) else "success"
+            manifest = frame.attrs.get("hpi_manifest", {})
+            _write_audit_event(
+                run_id,
+                dataset_id,
+                status,
+                period=frame.attrs.get("hpi_period"),
+                row_count=len(frame),
+                source_url=manifest.get("url"),
+                file_size_bytes=manifest.get("file_size"),
+                sha256=manifest.get("sha256"),
+            )
             append_run_log(
                 dataset_id,
-                "skipped" if frame.attrs.get("hpi_download_skipped", False) else "success",
+                status,
+                run_id=run_id,
                 period=frame.attrs.get("hpi_period"),
                 row_count=len(frame),
             )
             if not frame.attrs.get("hpi_download_skipped", False):
                 print(f"Loaded {len(frame):,} rows and {len(frame.columns):,} columns")
         except Exception as error:
-            append_run_log(dataset_id, "failed", error=str(error))
+            _write_audit_event(run_id, dataset_id, "failed", error=str(error))
+            append_run_log(dataset_id, "failed", run_id=run_id, error=str(error))
             raise
     return results
+
+
+def _write_audit_event(run_id: str, dataset_id: str, status: str, **details: object) -> None:
+    """Write to Databricks when configured, retaining local logging as fallback."""
+    try:
+        write_event(
+            run_id,
+            dataset_id,
+            status,
+            publication_period=details.get("period"),
+            source_url=details.get("source_url"),
+            row_count=details.get("row_count"),
+            file_size_bytes=details.get("file_size_bytes"),
+            sha256=details.get("sha256"),
+            completed_at=datetime.now(timezone.utc),
+            error_message=details.get("error"),
+        )
+    except (ImportError, RuntimeError, OSError) as error:
+        print(f"Databricks audit unavailable; local log retained: {error}")
 
 
 def main() -> None:

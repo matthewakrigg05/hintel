@@ -67,6 +67,12 @@ def is_download_current(dataset_id: str, source_url: str) -> bool:
     )
 
 
+def get_dataset_manifest(dataset_id: str) -> dict | None:
+    """Return the accepted manifest for a dataset, if one exists."""
+    dataset_dir = prepare_dataset_dir(dataset_id, "land_registry", "hpi")
+    return _load_manifest(dataset_dir)
+
+
 def _write_manifest(dataset_dir: Path, details: dict) -> None:
     """Atomically write metadata for the newly accepted raw file."""
     temporary = _manifest_path(dataset_dir).with_suffix(".json.part")
