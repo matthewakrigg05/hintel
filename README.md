@@ -131,6 +131,44 @@ The project is planned around a modern data and AI product stack:
 - machine learning and AI layers for forecasting and explanation
 - cloud deployment with monitoring and CI/CD workflows
 
+## Land Registry HPI ingestion
+
+The HPI pipeline uses stable dataset IDs and filename stems. The monthly
+publication period is discovered automatically by trying the current month and
+then earlier months until a CSV is available. Do not add a month to
+`dataset_id`; the stable ID keeps the local path and downstream dbt relation
+unchanged.
+
+Run the pipeline from the repository root:
+
+```powershell
+python -m ingestion.land_registry.hpi.pipeline
+```
+
+Set `DATA_PATH` before running. For example, the current raw file for average
+prices is stored at:
+
+```text
+D:\hIntel_data\land_registry\hpi\hpi_average_prices\raw.csv
+```
+
+Each accepted file has a neighbouring `manifest.json` containing its source
+URL, publication period, row count, file size, columns, checksum, and accepted
+timestamp. A repeated run skips a dataset when the discovered URL matches the
+accepted manifest and prints `Already retrieved`.
+
+Candidate files are validated before replacing `raw.csv`. Empty files, files
+smaller than the accepted version, and files with fewer rows are rejected. Run
+outcomes are appended to:
+
+```text
+D:\hIntel_data\land_registry\hpi\run_log.jsonl
+```
+
+The log records `success`, `skipped`, and `failed` outcomes. Use
+`--no-download` to reprocess the existing raw files without checking the
+Land Registry URLs.
+
 ## Data and insight philosophy
 
 The project prioritises:

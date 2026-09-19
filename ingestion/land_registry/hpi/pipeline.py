@@ -7,7 +7,12 @@ from ingestion.common.metadata import add_ingestion_metadata
 from ingestion.common.storage import prepare_dataset_dir
 
 from .config import LAND_REGISTRY_DATASETS
-from .downloads import discover_latest_url, save_downloaded_dataset
+from .downloads import (
+    append_run_log,
+    discover_latest_url,
+    is_download_current,
+    save_downloaded_dataset,
+)
 
 
 def load_dataset_from_path(file_path: Path) -> pd.DataFrame:
@@ -73,11 +78,16 @@ def ingest_dataset(dataset: dict, download: bool = True) -> pd.DataFrame:
     if download:
         source_url, period = discover_latest_url(dataset["filename"])
         print(f"Using {period} for {dataset_id}")
-        raw_path = save_downloaded_dataset(dataset_id, source_url)
+        already_retrieved = is_download_current(dataset_id, source_url)
+        raw_path = save_downloaded_dataset(dataset_id, source_url, period=period)
     else:
+        already_retrieved = False
         raw_path = existing_raw_path(dataset_id)
     frame = load_dataset_from_path(raw_path)
-    return add_ingestion_metadata(frame, {"_source_dataset": dataset_id, "_source_file": str(raw_path)})
+    result = add_ingestion_metadata(frame, {"_source_dataset": dataset_id, "_source_file": str(raw_path)})
+    result.attrs["hpi_period"] = period if download else None
+    result.attrs["hpi_download_skipped"] = already_retrieved
+    return result
 
 
 def run_land_registry_all(download: bool = True) -> dict[str, pd.DataFrame]:
@@ -96,9 +106,20 @@ def run_land_registry_all(download: bool = True) -> dict[str, pd.DataFrame]:
     for dataset in LAND_REGISTRY_DATASETS:
         dataset_id = dataset["dataset_id"]
         print(f"Processing {dataset_id}...")
-        frame = ingest_dataset(dataset, download=download)
-        results[dataset_id] = frame
-        print(f"Loaded {len(frame):,} rows and {len(frame.columns):,} columns")
+        try:
+            frame = ingest_dataset(dataset, download=download)
+            results[dataset_id] = frame
+            append_run_log(
+                dataset_id,
+                "skipped" if frame.attrs.get("hpi_download_skipped", False) else "success",
+                period=frame.attrs.get("hpi_period"),
+                row_count=len(frame),
+            )
+            if not frame.attrs.get("hpi_download_skipped", False):
+                print(f"Loaded {len(frame):,} rows and {len(frame.columns):,} columns")
+        except Exception as error:
+            append_run_log(dataset_id, "failed", error=str(error))
+            raise
     return results
 
 
