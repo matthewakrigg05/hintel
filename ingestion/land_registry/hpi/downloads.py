@@ -9,12 +9,34 @@ from .config import LAND_REGISTRY_API_KEY
 
 
 def auth_headers() -> dict[str, str]:
+    """
+    Build authorization headers for Land Registry requests so authentication
+    stays at the source boundary and shared download code remains provider-neutral.
+
+    Returns:
+        A headers dictionary containing the configured API key when available.
+    """
     if not LAND_REGISTRY_API_KEY:
         return {}
     return {"Authorization": LAND_REGISTRY_API_KEY}
 
 
 def get_download_url_from_version(version_url: str, headers: dict | None = None) -> tuple[str, str]:
+    """
+    Select the preferred downloadable file from a version response. Land
+    Registry metadata can expose several formats, so the ingestion pipeline needs
+    one predictable preference order for raw files.
+
+    Args:
+        version_url: URL of a Land Registry version metadata endpoint.
+        headers: Optional HTTP request headers.
+
+    Returns:
+        A tuple containing the download URL and lowercase file type.
+
+    Raises:
+        ValueError: If the version contains no usable download link.
+    """
     version_data = get_json(version_url, headers=headers)
     downloads = version_data.get("downloads", {})
     for key in ("csv", "xlsx", "xls", "json"):
@@ -31,6 +53,20 @@ def get_download_url_from_version(version_url: str, headers: dict | None = None)
 
 
 def resolve_download_url(source_url: str, headers: dict | None = None) -> tuple[str, str]:
+    """
+    Resolve a direct file URL or API metadata URL to a downloadable file so
+    source configuration can use stable provider URLs without duplicating flow.
+
+    Args:
+        source_url: Direct file URL or Land Registry metadata URL.
+        headers: Optional HTTP request headers.
+
+    Returns:
+        A tuple containing the download URL and lowercase file type.
+
+    Raises:
+        ValueError: If the metadata does not expose a downloadable file.
+    """
     suffix = Path(urlparse(source_url).path).suffix.lower().lstrip(".")
     if suffix in {"csv", "xlsx", "xls", "json"}:
         return source_url, suffix
@@ -44,6 +80,18 @@ def resolve_download_url(source_url: str, headers: dict | None = None) -> tuple[
 
 
 def save_downloaded_dataset(dataset_id: str, source_url: str) -> Path:
+    """
+    Resolve and save one HPI dataset in the configured raw-data area. This
+    combines HPI URL resolution with the shared downloader while keeping
+    provider-specific path conventions in one place.
+
+    Args:
+        dataset_id: Identifier used for the dataset directory.
+        source_url: Direct file or metadata URL for the dataset.
+
+    Returns:
+        The path of the saved raw dataset file.
+    """
     headers = auth_headers()
     download_url, file_type = resolve_download_url(source_url, headers=headers)
     destination = prepare_dataset_dir(dataset_id, "land_registry", "hpi") / f"raw.{file_type}"
