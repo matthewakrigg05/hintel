@@ -7,6 +7,7 @@ import pandas as pd
 from ingestion.common.metadata import add_ingestion_metadata
 from ingestion.common.storage import prepare_dataset_dir
 from ingestion.destinations.databricks.audit import new_run_id, write_event
+from ingestion.destinations.databricks.databricks import RAW_CATALOG, RAW_SCHEMA, bronze_write
 
 from .config import LAND_REGISTRY_DATASETS
 from .downloads import (
@@ -87,10 +88,19 @@ def ingest_dataset(dataset: dict, download: bool = True) -> pd.DataFrame:
         already_retrieved = False
         raw_path = existing_raw_path(dataset_id)
     frame = load_dataset_from_path(raw_path)
-    result = add_ingestion_metadata(frame, {"_source_dataset": dataset_id, "_source_file": str(raw_path)})
+    manifest = get_dataset_manifest(dataset_id) or {}
+    result = add_ingestion_metadata(
+        frame,
+        {
+            "_source_dataset": dataset_id,
+            "_source_file": str(raw_path),
+            "_source_sha256": manifest.get("sha256"),
+            "_publication_period": manifest.get("period") if not download else period,
+        },
+    )
     result.attrs["hpi_period"] = period if download else None
     result.attrs["hpi_download_skipped"] = already_retrieved
-    result.attrs["hpi_manifest"] = get_dataset_manifest(dataset_id) or {}
+    result.attrs["hpi_manifest"] = manifest
     return result
 
 
@@ -114,14 +124,22 @@ def run_land_registry_all(download: bool = True) -> dict[str, pd.DataFrame]:
         try:
             frame = ingest_dataset(dataset, download=download)
             results[dataset_id] = frame
+            print(f"Loaded {len(frame):,} rows and {len(frame.columns):,} columns for {dataset_id}")
             status = "skipped" if frame.attrs.get("hpi_download_skipped", False) else "success"
             manifest = frame.attrs.get("hpi_manifest", {})
+            write_result = bronze_write(
+                frame,
+                catalog=RAW_CATALOG,
+                schema=RAW_SCHEMA,
+                table=dataset_id,
+                key_cols=["_source_sha256"],
+            )
             _write_audit_event(
                 run_id,
                 dataset_id,
                 status,
                 period=frame.attrs.get("hpi_period"),
-                row_count=len(frame),
+                row_count=write_result["row_count"],
                 source_url=manifest.get("url"),
                 file_size_bytes=manifest.get("file_size"),
                 sha256=manifest.get("sha256"),
@@ -133,8 +151,7 @@ def run_land_registry_all(download: bool = True) -> dict[str, pd.DataFrame]:
                 period=frame.attrs.get("hpi_period"),
                 row_count=len(frame),
             )
-            if not frame.attrs.get("hpi_download_skipped", False):
-                print(f"Loaded {len(frame):,} rows and {len(frame.columns):,} columns")
+            print(f"Completed {dataset_id}: {status}")
         except Exception as error:
             _write_audit_event(run_id, dataset_id, "failed", error=str(error))
             append_run_log(dataset_id, "failed", run_id=run_id, error=str(error))

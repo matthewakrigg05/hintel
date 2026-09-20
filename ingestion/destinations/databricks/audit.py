@@ -4,8 +4,14 @@ import os
 import uuid
 from datetime import datetime, timezone
 
+from dotenv import load_dotenv
 
-AUDIT_TABLE = os.getenv("DATABRICKS_INGESTION_AUDIT_TABLE", "bronze.ingestion_runs")
+load_dotenv()
+
+AUDIT_TABLE = os.getenv(
+    "DATABRICKS_INGESTION_AUDIT_TABLE",
+    "bronze.audit.ingestion_runs",
+)
 
 
 def new_run_id() -> str:
@@ -31,13 +37,27 @@ def _connection():
 
 
 def _table_name() -> str:
-    if not AUDIT_TABLE.replace("_", "").replace(".", "").isalnum():
+    parts = AUDIT_TABLE.split(".")
+    if len(parts) not in {2, 3} or any(not part.replace("_", "").isalnum() for part in parts):
         raise ValueError("DATABRICKS_INGESTION_AUDIT_TABLE contains invalid characters")
     return AUDIT_TABLE
 
 
+def _schema_name() -> str:
+    parts = _table_name().split(".")
+    if len(parts) == 2:
+        return parts[0]
+    return ".".join(parts[:2])
+
+
+def _catalog_name() -> str | None:
+    parts = _table_name().split(".")
+    return parts[0] if len(parts) == 3 else None
+
+
 def ensure_audit_table() -> None:
     """Create the Delta audit table when it does not already exist."""
+    schema_statement = f"create schema if not exists {_schema_name()}"
     statement = f"""
         create table if not exists {_table_name()} (
             run_id string,
@@ -57,6 +77,10 @@ def ensure_audit_table() -> None:
     connection = _connection()
     try:
         with connection.cursor() as cursor:
+            catalog = _catalog_name()
+            if catalog:
+                cursor.execute(f"create catalog if not exists `{catalog}`")
+            cursor.execute(schema_statement)
             cursor.execute(statement)
     finally:
         connection.close()

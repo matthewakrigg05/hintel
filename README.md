@@ -169,8 +169,19 @@ The log records `success`, `skipped`, and `failed` outcomes. Use
 `--no-download` to reprocess the existing raw files without checking the
 Land Registry URLs.
 
+When Databricks is configured, the pipeline uploads each dataframe as a
+checksum-named CSV to the managed Volume
+`/Volumes/bronze/land_registry/files/` and bulk-loads it with `COPY INTO`. Raw
+Delta tables are created under `bronze.land_registry`, for example
+`bronze.land_registry.hpi_average_prices`. Set
+`DATABRICKS_RAW_VOLUME_PATH` only if the managed Volume uses a different path.
+Raw tables preserve source columns as strings; dbt staging models own type
+conversion and standardised naming. If a table was created by the earlier
+typed SQL writer, set `DATABRICKS_RESET_RAW_TABLES=true` for one run to rebuild
+the raw table, then remove the setting.
+
 For durable monitoring, the pipeline also writes audit events to the Delta
-table `bronze.ingestion_runs` when Databricks is configured. Set
+table `bronze.audit.ingestion_runs` when Databricks is configured. Set
 `DATABRICKS_SERVER_HOSTNAME`, `DATABRICKS_HTTP_PATH`, and `DATABRICKS_TOKEN` in
 the runtime environment. Install the dependencies from `requirements.txt`.
 The table is created on demand and includes the shared pipeline `run_id`,
