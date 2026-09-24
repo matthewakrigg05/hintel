@@ -91,6 +91,7 @@ def write_event(
     dataset_id: str,
     status: str,
     *,
+    source: str = "land_registry_hpi",
     source_url: str | None = None,
     publication_period: str | None = None,
     started_at: datetime | None = None,
@@ -108,7 +109,7 @@ def write_event(
     values = (
         run_id,
         dataset_id,
-        "land_registry_hpi",
+        source,
         source_url,
         publication_period,
         status,

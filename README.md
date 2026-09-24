@@ -171,8 +171,9 @@ Land Registry URLs.
 
 When Databricks is configured, the pipeline uploads each dataframe as a
 checksum-named CSV to the managed Volume
-`/Volumes/bronze/land_registry/files/` and bulk-loads it with `COPY INTO`. Raw
-Delta tables are created under `bronze.land_registry`, for example
+`/Volumes/<catalog>/<schema>/files/` and bulk-loads it with `COPY INTO`. The
+default path follows `DATABRICKS_RAW_CATALOG` and `DATABRICKS_RAW_SCHEMA`.
+Raw Delta tables are created under `bronze.land_registry`, for example
 `bronze.land_registry.hpi_average_prices`. Set
 `DATABRICKS_RAW_VOLUME_PATH` only if the managed Volume uses a different path.
 Raw tables preserve source columns as strings; dbt staging models own type
@@ -187,6 +188,38 @@ the runtime environment. Install the dependencies from `requirements.txt`.
 The table is created on demand and includes the shared pipeline `run_id`,
 dataset, publication period, status, row count, timestamps, and failure text.
 Local JSONL logging remains available when Databricks is unavailable.
+
+## Land Registry Price Paid ingestion
+
+Price Paid uses the annual public CSV files published by HM Land Registry.
+The downloader checks each year from 2018 through 2026 and skips a year when
+its accepted raw file and manifest are already present. Missing years are
+requested from the API and stored at:
+
+```text
+D:\hIntel_data\land_registry\price_paid\price_paid\raw_<year>.csv
+```
+
+The current-year file is refreshed on every run. Existing transaction IDs are
+compared with the refreshed snapshot, and only new transactions are sent to
+the Bronze table. The full refreshed snapshot remains on disk for the next
+monthly comparison.
+
+Large Price Paid years are uploaded in row batches to keep each Databricks
+Volume request bounded. The default is 50,000 rows per batch and can be
+changed with `PRICE_PAID_BATCH_ROWS`.
+
+Run it from the repository root:
+
+```powershell
+python -m ingestion.land_registry.price_paid.pipeline
+```
+
+Use `--no-download` to process the existing annual raw files. Each accepted
+file has a year-specific manifest beside it and outcomes are appended to
+`D:\hIntel_data\land_registry\price_paid\run_log.jsonl`. Price Paid source
+columns are preserved as strings in the raw Bronze table, including the
+transaction and property address fields.
 
 ## Data and insight philosophy
 

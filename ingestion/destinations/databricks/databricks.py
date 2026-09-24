@@ -21,13 +21,14 @@ RAW_CATALOG = os.getenv("DATABRICKS_RAW_CATALOG", "bronze")
 RAW_SCHEMA = os.getenv("DATABRICKS_RAW_SCHEMA", "land_registry")
 RAW_VOLUME_PATH = os.getenv(
     "DATABRICKS_RAW_VOLUME_PATH",
-    "/Volumes/bronze/land_registry/files",
+    f"/Volumes/{RAW_CATALOG}/{RAW_SCHEMA}/files",
 )
 RESET_RAW_TABLES = os.getenv("DATABRICKS_RESET_RAW_TABLES", "false").lower() in {
     "1",
     "true",
     "yes",
 }
+UPLOAD_TIMEOUT_SECONDS = int(os.getenv("DATABRICKS_UPLOAD_TIMEOUT_SECONDS", "1800"))
 
 
 def _identifier(value: str, label: str) -> str:
@@ -43,9 +44,10 @@ def _column_identifier(value: object) -> str:
     return f"`{column.replace('`', '``')}`"
 
 
-def _volume_path(dataset: str, checksum: str) -> str:
+def _volume_path(dataset: str, checksum: str, batch_id: str | None = None) -> str:
     volume_path = RAW_VOLUME_PATH.rstrip("/")
-    return f"{volume_path}/{dataset}-{checksum}.csv"
+    suffix = f"-{batch_id}" if batch_id else ""
+    return f"{volume_path}/{dataset}-{checksum}{suffix}.csv"
 
 
 def _upload_to_volume(local_path: Path, volume_path: str) -> None:
@@ -61,21 +63,26 @@ def _upload_to_volume(local_path: Path, volume_path: str) -> None:
         hostname = f"https://{hostname}"
     encoded_path = quote(volume_path.lstrip("/"), safe="/")
     endpoint = f"{hostname.rstrip('/')}/api/2.0/fs/files/{encoded_path}?overwrite=true"
-    payload = local_path.read_bytes()
     headers = {
         "Authorization": f"Bearer {token}",
         "Content-Type": "application/octet-stream",
-        "Content-Length": str(len(payload)),
+        "Content-Length": str(local_path.stat().st_size),
     }
     last_error = None
     for attempt in range(1, 4):
         try:
-            response = requests.put(
-                endpoint,
-                headers=headers,
-                data=payload,
-                timeout=(30, 600),
+            print(
+                f"[bronze] uploading {local_path.stat().st_size:,} bytes "
+                f"(attempt {attempt}/3)",
+                flush=True,
             )
+            with local_path.open("rb") as payload:
+                response = requests.put(
+                    endpoint,
+                    headers=headers,
+                    data=payload,
+                    timeout=(30, UPLOAD_TIMEOUT_SECONDS),
+                )
             response.raise_for_status()
             return
         except (requests.ConnectionError, requests.Timeout) as error:
@@ -92,7 +99,7 @@ def _upload_to_volume(local_path: Path, volume_path: str) -> None:
     raise RuntimeError(f"Databricks Volume upload failed after 3 attempts: {last_error}") from last_error
 
 
-def bronze_write(df, catalog, schema, table, key_cols):
+def bronze_write(df, catalog, schema, table, key_cols, batch_id: str | None = None):
     """Upload one dataframe to a managed Volume and bulk-load it with COPY INTO.
 
     ``key_cols`` is retained for the destination interface. Databricks tracks
@@ -119,7 +126,9 @@ def bronze_write(df, catalog, schema, table, key_cols):
 
     qualified_table = f"`{catalog}`.`{schema}`.`{table}`"
     definitions = ", ".join(f"{_column_identifier(column)} string" for column in columns)
-    target_volume_path = _volume_path(table, checksum)
+    if batch_id is not None and not re.fullmatch(r"[A-Za-z0-9_-]+", batch_id):
+        raise ValueError("Batch identifier contains invalid filename characters")
+    target_volume_path = _volume_path(table, checksum, batch_id=batch_id)
     started_at = time.perf_counter()
     print(
         f"[bronze] {table}: preparing {len(df):,} rows for managed Volume upload",
@@ -139,7 +148,8 @@ def bronze_write(df, catalog, schema, table, key_cols):
             print(f"[bronze] {table}: Databricks Volume ready", flush=True)
 
             with tempfile.TemporaryDirectory(prefix="hintel-bronze-") as temporary_dir:
-                local_path = Path(temporary_dir) / f"{table}-{checksum}.csv"
+                batch_suffix = f"-{batch_id}" if batch_id else ""
+                local_path = Path(temporary_dir) / f"{table}-{checksum}{batch_suffix}.csv"
                 df.to_csv(local_path, index=False)
                 print(
                     f"[bronze] {table}: uploading {local_path.stat().st_size:,} bytes",
