@@ -1,0 +1,1 @@
+EPC_BASE_URL = "https://api.get-energy-performance-data.communities.gov.uk"
