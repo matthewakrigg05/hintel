@@ -18,6 +18,9 @@ seeds:
     ons:
       +database: bronze
       +schema: ons
+    epc:
+      +database: bronze
+      +schema: epc
 
 models:
   h_intel:

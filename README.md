@@ -189,6 +189,30 @@ The table is created on demand and includes the shared pipeline `run_id`,
 dataset, publication period, status, row count, timestamps, and failure text.
 Local JSONL logging remains available when Databricks is unavailable.
 
+## EPC domestic certificate ingestion
+
+The EPC pipeline downloads the provider's monthly full-load domestic CSV ZIP,
+then streams its yearly CSV members into bounded dataframe batches. Set
+`EPC_API_TOKEN` to the bearer token from the Energy Performance of Buildings
+Data API account. Set `DATA_PATH` and the Databricks credentials as described
+above, then run from the repository root:
+
+```powershell
+python -m ingestion.epc.pipeline
+```
+
+The ZIP and manifest are stored under
+`<DATA_PATH>\epc\domestic\raw.zip`. Runs skip an unchanged publication based
+on the provider's `lastUpdated` value. Use `--no-download` to reprocess the
+accepted archive. Batch size defaults to 50,000 rows and can be changed with
+`EPC_BATCH_ROWS`.
+
+The Bronze table is `bronze.epc.epc_domestic`, with upload files in the managed
+Volume `/Volumes/bronze/epc/files`. Set `DATABRICKS_EPC_SCHEMA` to change the
+schema or `DATABRICKS_EPC_RAW_VOLUME_PATH` when the EPC Volume uses a custom
+path. EPC run outcomes are appended to `<DATA_PATH>\epc\run_log.jsonl` and the
+shared `bronze.audit.ingestion_runs` table.
+
 ## Land Registry Price Paid ingestion
 
 Price Paid uses the annual public CSV files published by HM Land Registry.

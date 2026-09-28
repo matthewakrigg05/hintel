@@ -44,8 +44,13 @@ def _column_identifier(value: object) -> str:
     return f"`{column.replace('`', '``')}`"
 
 
-def _volume_path(dataset: str, checksum: str, batch_id: str | None = None) -> str:
-    volume_path = RAW_VOLUME_PATH.rstrip("/")
+def _volume_path(
+    dataset: str,
+    checksum: str,
+    batch_id: str | None = None,
+    volume_path: str | None = None,
+) -> str:
+    volume_path = (volume_path or RAW_VOLUME_PATH).rstrip("/")
     suffix = f"-{batch_id}" if batch_id else ""
     return f"{volume_path}/{dataset}-{checksum}{suffix}.csv"
 
@@ -99,7 +104,15 @@ def _upload_to_volume(local_path: Path, volume_path: str) -> None:
     raise RuntimeError(f"Databricks Volume upload failed after 3 attempts: {last_error}") from last_error
 
 
-def bronze_write(df, catalog, schema, table, key_cols, batch_id: str | None = None):
+def bronze_write(
+    df,
+    catalog,
+    schema,
+    table,
+    key_cols,
+    batch_id: str | None = None,
+    volume_path: str | None = None,
+):
     """Upload one dataframe to a managed Volume and bulk-load it with COPY INTO.
 
     ``key_cols`` is retained for the destination interface. Databricks tracks
@@ -128,7 +141,12 @@ def bronze_write(df, catalog, schema, table, key_cols, batch_id: str | None = No
     definitions = ", ".join(f"{_column_identifier(column)} string" for column in columns)
     if batch_id is not None and not re.fullmatch(r"[A-Za-z0-9_-]+", batch_id):
         raise ValueError("Batch identifier contains invalid filename characters")
-    target_volume_path = _volume_path(table, checksum, batch_id=batch_id)
+    target_volume_path = _volume_path(
+        table,
+        checksum,
+        batch_id=batch_id,
+        volume_path=volume_path,
+    )
     started_at = time.perf_counter()
     print(
         f"[bronze] {table}: preparing {len(df):,} rows for managed Volume upload",
