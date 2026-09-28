@@ -137,7 +137,7 @@ def run(download: bool = True) -> dict[str, object]:
         return {"dataset_id": EPC_DATASET_ID, "status": "success", "row_count": row_count}
     except Exception as error:
         _write_audit_event(run_id, "failed", manifest=manifest, error=str(error))
-        append_run_log(run_id=run_id, status="failed", error=str(error))
+        append_run_log("failed", run_id=run_id, error=str(error))
         raise
 
 
