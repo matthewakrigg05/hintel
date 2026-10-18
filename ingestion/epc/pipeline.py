@@ -34,7 +34,7 @@ def _publication_period(member: str) -> str | None:
     return match.group(0) if match else None
 
 
-def ingest_archive(raw_path: Path, manifest: dict, run_id: str) -> int:
+def ingest_archive(raw_path: Path, manifest: dict) -> int:
     checksum = manifest.get("sha256")
     if not checksum:
         raise ValueError("EPC archive manifest is missing its checksum")
@@ -98,24 +98,13 @@ def run(download: bool = True) -> dict[str, object]:
     run_id = new_run_id()
     raw_path: Path | None = None
     manifest: dict = {}
+    already_retrieved = False
     try:
         if download:
             info = get_full_load_info()
             already_retrieved = is_download_current(info["lastUpdated"])
             raw_path = save_downloaded_dataset(info)
             manifest = get_dataset_manifest() or {}
-            if already_retrieved:
-                status = "skipped"
-                row_count = manifest.get("row_count", 0)
-                _write_audit_event(run_id, status, row_count=row_count, manifest=manifest)
-                append_run_log(
-                    status,
-                    run_id=run_id,
-                    last_updated=info["lastUpdated"],
-                    row_count=row_count,
-                )
-                print(f"Completed {EPC_DATASET_ID}: {status}; source file is unchanged")
-                return {"dataset_id": EPC_DATASET_ID, "status": status, "row_count": row_count}
         else:
             raw_path = existing_raw_path()
             manifest = get_dataset_manifest() or {}
@@ -123,18 +112,19 @@ def run(download: bool = True) -> dict[str, object]:
         if raw_path is None:
             raise RuntimeError("EPC raw archive was not resolved")
         print(f"Ingesting {EPC_DATASET_ID} from {raw_path}")
-        row_count = ingest_archive(raw_path, manifest, run_id)
+        row_count = ingest_archive(raw_path, manifest)
         manifest = get_dataset_manifest() or manifest
-        _write_audit_event(run_id, "success", row_count=row_count, manifest=manifest)
+        status = "skipped" if already_retrieved else "success"
+        _write_audit_event(run_id, status, row_count=row_count, manifest=manifest)
         append_run_log(
-            "success",
+            status,
             run_id=run_id,
             last_updated=manifest.get("last_updated"),
             row_count=row_count,
             sha256=manifest.get("sha256"),
         )
-        print(f"Completed {EPC_DATASET_ID}: {row_count:,} rows")
-        return {"dataset_id": EPC_DATASET_ID, "status": "success", "row_count": row_count}
+        print(f"Completed {EPC_DATASET_ID}: {status}; {row_count:,} rows")
+        return {"dataset_id": EPC_DATASET_ID, "status": status, "row_count": row_count}
     except Exception as error:
         _write_audit_event(run_id, "failed", manifest=manifest, error=str(error))
         append_run_log("failed", run_id=run_id, error=str(error))

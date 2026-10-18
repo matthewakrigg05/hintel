@@ -198,14 +198,17 @@ Data API account. Set `DATA_PATH` and the Databricks credentials as described
 above, then run from the repository root:
 
 ```powershell
-python -m ingestion.epc.pipeline
+python -m ingestion.epc.fetch_epc
 ```
+
+This fetch entry point can also be run directly with
+`python ingestion\epc\fetch_epc.py` from the repository root.
 
 The ZIP and manifest are stored under
 `<DATA_PATH>\epc\domestic\raw.zip`. Runs skip an unchanged publication based
 on the provider's `lastUpdated` value. Use `--no-download` to reprocess the
-accepted archive. Batch size defaults to 50,000 rows and can be changed with
-`EPC_BATCH_ROWS`.
+accepted archive with `python -m ingestion.epc.pipeline --no-download`. Batch
+size defaults to 50,000 rows and can be changed with `EPC_BATCH_ROWS`.
 
 The Bronze table is `bronze.epc.epc_domestic`, with upload files in the managed
 Volume `/Volumes/bronze/epc/files`. Set `DATABRICKS_EPC_SCHEMA` to change the
