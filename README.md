@@ -208,13 +208,19 @@ The ZIP and manifest are stored under
 `<DATA_PATH>\epc\domestic\raw.zip`. Runs skip an unchanged publication based
 on the provider's `lastUpdated` value. Use `--no-download` to reprocess the
 accepted archive with `python -m ingestion.epc.pipeline --no-download`. Batch
-size defaults to 50,000 rows and can be changed with `EPC_BATCH_ROWS`.
+size defaults to 50,000 rows and can be changed with `EPC_BATCH_ROWS`. The
+pipeline can also be run directly from the repository root with
+`python ingestion\epc\pipeline.py --no-download`.
 
-The Bronze table is `bronze.epc.epc_domestic`, with upload files in the managed
-Volume `/Volumes/bronze/epc/files`. Set `DATABRICKS_EPC_SCHEMA` to change the
-schema or `DATABRICKS_EPC_RAW_VOLUME_PATH` when the EPC Volume uses a custom
-path. EPC run outcomes are appended to `<DATA_PATH>\epc\run_log.jsonl` and the
-shared `bronze.audit.ingestion_runs` table.
+CSV members whose names start with `certificates` and `recommendations` are
+loaded separately into `bronze.epc.certificates` and
+`bronze.epc.recommendations`. Both formats must be present in the archive.
+Upload files are stored in the managed Volume `/Volumes/bronze/epc/files`.
+Set `DATABRICKS_EPC_SCHEMA` to change the schema or
+`DATABRICKS_EPC_RAW_VOLUME_PATH` when the EPC Volume uses a custom path. EPC
+run outcomes and per-table row counts are appended to
+`<DATA_PATH>\epc\run_log.jsonl` and the shared
+`bronze.audit.ingestion_runs` table.
 
 ## Land Registry Price Paid ingestion
 
