@@ -16,11 +16,10 @@ from ingestion.destinations.databricks.audit import new_run_id, write_event
 from ingestion.destinations.databricks.databricks import RAW_CATALOG, bronze_write
 
 if __package__ in {None, ""}:
-    from ingestion.epc.config import (
-        EPC_BATCH_ROWS,
+    from ingestion.epc.config import EPC_BATCH_ROWS, EPC_SCHEMA
+    from ingestion.epc.england_wales.config import (
         EPC_DATASET_ID,
         EPC_DATASET_IDS,
-        EPC_SCHEMA,
     )
     from ingestion.epc.england_wales.downloads import (
         append_run_log,
@@ -32,7 +31,8 @@ if __package__ in {None, ""}:
         update_dataset_manifest,
     )
 else:
-    from ..config import EPC_BATCH_ROWS, EPC_DATASET_ID, EPC_DATASET_IDS, EPC_SCHEMA
+    from ..config import EPC_BATCH_ROWS, EPC_SCHEMA
+    from .config import EPC_DATASET_ID, EPC_DATASET_IDS
     from .downloads import (
         append_run_log,
         existing_raw_path,

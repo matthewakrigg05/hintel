@@ -9,7 +9,7 @@ from ingestion.common.download import calculate_sha256, download_file
 from ingestion.common.http import get_json
 from ingestion.common.storage import data_root, prepare_dataset_dir
 
-from ..config import EPC_API_TOKEN, EPC_DATASET_IDS, EPC_DATASET_ID
+from .config import EPC_API_TOKEN, EPC_DATASET_IDS, EPC_DATASET_ID
 
 
 EPC_BASE_URL = "https://api.get-energy-performance-data.communities.gov.uk"
