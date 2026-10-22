@@ -131,6 +131,162 @@ The project is planned around a modern data and AI product stack:
 - machine learning and AI layers for forecasting and explanation
 - cloud deployment with monitoring and CI/CD workflows
 
+## Land Registry HPI ingestion
+
+The HPI pipeline uses stable dataset IDs and filename stems. The monthly
+publication period is discovered automatically by trying the current month and
+then earlier months until a CSV is available. Do not add a month to
+`dataset_id`; the stable ID keeps the local path and downstream dbt relation
+unchanged.
+
+Run the pipeline from the repository root:
+
+```powershell
+python -m ingestion.land_registry.hpi.pipeline
+```
+
+Set `DATA_PATH` before running. For example, the current raw file for average
+prices is stored at:
+
+```text
+D:\hIntel_data\land_registry\hpi\hpi_average_prices\raw.csv
+```
+
+Each accepted file has a neighbouring `manifest.json` containing its source
+URL, publication period, row count, file size, columns, checksum, and accepted
+timestamp. A repeated run skips a dataset when the discovered URL matches the
+accepted manifest and prints `Already retrieved`.
+
+Candidate files are validated before replacing `raw.csv`. Empty files, files
+smaller than the accepted version, and files with fewer rows are rejected. Run
+outcomes are appended to:
+
+```text
+D:\hIntel_data\land_registry\hpi\run_log.jsonl
+```
+
+The log records `success`, `skipped`, and `failed` outcomes. Use
+`--no-download` to reprocess the existing raw files without checking the
+Land Registry URLs.
+
+When Databricks is configured, the pipeline uploads each dataframe as a
+checksum-named CSV to the managed Volume
+`/Volumes/<catalog>/<schema>/files/` and bulk-loads it with `COPY INTO`. The
+default path follows `DATABRICKS_RAW_CATALOG` and `DATABRICKS_RAW_SCHEMA`.
+Raw Delta tables are created under `bronze.land_registry`, for example
+`bronze.land_registry.hpi_average_prices`. Set
+`DATABRICKS_RAW_VOLUME_PATH` only if the managed Volume uses a different path.
+Raw tables preserve source columns as strings; dbt staging models own type
+conversion and standardised naming. If a table was created by the earlier
+typed SQL writer, set `DATABRICKS_RESET_RAW_TABLES=true` for one run to rebuild
+the raw table, then remove the setting.
+
+For durable monitoring, the pipeline also writes audit events to the Delta
+table `bronze.audit.ingestion_runs` when Databricks is configured. Set
+`DATABRICKS_SERVER_HOSTNAME`, `DATABRICKS_HTTP_PATH`, and `DATABRICKS_TOKEN` in
+the runtime environment. Install the dependencies from `requirements.txt`.
+The table is created on demand and includes the shared pipeline `run_id`,
+dataset, publication period, status, row count, timestamps, and failure text.
+Local JSONL logging remains available when Databricks is unavailable.
+
+## England and Wales EPC ingestion
+
+The England and Wales EPC pipeline downloads the provider's full-load CSV ZIP
+and streams its members into bounded dataframe batches. Set `EPC_API_TOKEN` to
+the bearer token from the Energy Performance of Buildings Data API account.
+Set `DATA_PATH` and the Databricks credentials as described above, then run
+from the repository root:
+
+```powershell
+python -m ingestion.epc.england_wales.fetch_epc
+```
+
+The default dataset is domestic. Select non-domestic data using the
+`/api/files/non-domestic/csv` endpoint:
+
+```powershell
+python -m ingestion.epc.england_wales.fetch_epc --dataset non_domestic
+```
+
+This fetch entry point can also be run directly with
+`python ingestion\epc\england_wales\fetch_epc.py --dataset non_domestic` from
+the repository root.
+
+The ZIP and manifest are stored separately under
+`<DATA_PATH>\epc\england_wales\domestic\raw.zip` or
+`<DATA_PATH>\epc\england_wales\non_domestic\raw.zip`. Runs skip an unchanged
+publication based on the provider's `lastUpdated` value. Use `--no-download`
+to reprocess an accepted archive, for example
+`python -m ingestion.epc.england_wales.pipeline --dataset non_domestic --no-download`.
+Batch size defaults to 50,000 rows and can be changed with `EPC_BATCH_ROWS`.
+Existing archives under the previous `<DATA_PATH>\epc\domestic` and
+`<DATA_PATH>\epc\non_domestic` paths remain available to no-download runs.
+
+CSV members whose names start with `certificates` and `recommendations` are
+loaded separately into `bronze.epc.certificates` and
+`bronze.epc.recommendations` for domestic data. Both formats must be present
+in that archive. Non-domestic CSV members are loaded into
+`bronze.epc.non_domestic`.
+Upload files are stored in the managed Volume `/Volumes/bronze/epc/files`.
+Set `DATABRICKS_EPC_SCHEMA` to change the schema or
+`DATABRICKS_EPC_RAW_VOLUME_PATH` when the EPC Volume uses a custom path. EPC
+run outcomes and per-table row counts are appended to
+`<DATA_PATH>\epc\england_wales\run_log.jsonl` and the shared
+`bronze.audit.ingestion_runs` table.
+
+## Scotland EPC ingestion
+
+The Scotland pipeline downloads the domestic and non-domestic current and
+extended-history resources to `<DATA_PATH>\epc\scotland`. The data.gov.scot
+downloads are 7z archives, extracted and streamed into the configured EPC
+schema in batches. Install dependencies from `requirements.txt`, including
+`py7zr`, before running:
+
+```powershell
+python -m ingestion.epc.scotland.fetch_epc
+```
+
+Run one resource with `--dataset domestic_current`,
+`non_domestic_current`, `domestic_extended`, or `non_domestic_extended`.
+Use `--no-download` to process accepted archives again, or `--refresh` to
+download the resources again. Each resource loads into its own table:
+`scotland_domestic_current`, `scotland_non_domestic_current`,
+`scotland_domestic_extended`, and `scotland_non_domestic_extended`, avoiding
+overwriting or combining the current and extended-history sources. Run logs
+are appended to `<DATA_PATH>\epc\scotland\run_log.jsonl`.
+
+## Land Registry Price Paid ingestion
+
+Price Paid uses the annual public CSV files published by HM Land Registry.
+The downloader checks each year from 2018 through 2026 and skips a year when
+its accepted raw file and manifest are already present. Missing years are
+requested from the API and stored at:
+
+```text
+D:\hIntel_data\land_registry\price_paid\price_paid\raw_<year>.csv
+```
+
+The current-year file is refreshed on every run. Existing transaction IDs are
+compared with the refreshed snapshot, and only new transactions are sent to
+the Bronze table. The full refreshed snapshot remains on disk for the next
+monthly comparison.
+
+Large Price Paid years are uploaded in row batches to keep each Databricks
+Volume request bounded. The default is 50,000 rows per batch and can be
+changed with `PRICE_PAID_BATCH_ROWS`.
+
+Run it from the repository root:
+
+```powershell
+python -m ingestion.land_registry.price_paid.pipeline
+```
+
+Use `--no-download` to process the existing annual raw files. Each accepted
+file has a year-specific manifest beside it and outcomes are appended to
+`D:\hIntel_data\land_registry\price_paid\run_log.jsonl`. Price Paid source
+columns are preserved as strings in the raw Bronze table, including the
+transaction and property address fields.
+
 ## Data and insight philosophy
 
 The project prioritises:
