@@ -23,10 +23,10 @@
 
 ## Checklist
 
-- [ ] `dotnet build` passes
+- [ ] Project builds successfully
 - [ ] Tests written / updated
 - [ ] Tests passing
-- [ ] No new compiler warnings
+- [ ] No new build or lint warnings
 - [ ] Migrations included (if schema changed)
 - [ ] No secrets or connection strings committed
 
