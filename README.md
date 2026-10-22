@@ -189,38 +189,71 @@ The table is created on demand and includes the shared pipeline `run_id`,
 dataset, publication period, status, row count, timestamps, and failure text.
 Local JSONL logging remains available when Databricks is unavailable.
 
-## EPC domestic certificate ingestion
+## England and Wales EPC ingestion
 
-The EPC pipeline downloads the provider's monthly full-load domestic CSV ZIP,
-then streams its yearly CSV members into bounded dataframe batches. Set
-`EPC_API_TOKEN` to the bearer token from the Energy Performance of Buildings
-Data API account. Set `DATA_PATH` and the Databricks credentials as described
-above, then run from the repository root:
+The England and Wales EPC pipeline downloads the provider's full-load CSV ZIP
+and streams its members into bounded dataframe batches. Set `EPC_API_TOKEN` to
+the bearer token from the Energy Performance of Buildings Data API account.
+Set `DATA_PATH` and the Databricks credentials as described above, then run
+from the repository root:
 
 ```powershell
-python -m ingestion.epc.fetch_epc
+python -m ingestion.epc.england_wales.fetch_epc
+```
+
+The default dataset is domestic. Select non-domestic data using the
+`/api/files/non-domestic/csv` endpoint:
+
+```powershell
+python -m ingestion.epc.england_wales.fetch_epc --dataset non_domestic
 ```
 
 This fetch entry point can also be run directly with
-`python ingestion\epc\fetch_epc.py` from the repository root.
+`python ingestion\epc\england_wales\fetch_epc.py --dataset non_domestic` from
+the repository root.
 
-The ZIP and manifest are stored under
-`<DATA_PATH>\epc\domestic\raw.zip`. Runs skip an unchanged publication based
-on the provider's `lastUpdated` value. Use `--no-download` to reprocess the
-accepted archive with `python -m ingestion.epc.pipeline --no-download`. Batch
-size defaults to 50,000 rows and can be changed with `EPC_BATCH_ROWS`. The
-pipeline can also be run directly from the repository root with
-`python ingestion\epc\pipeline.py --no-download`.
+The ZIP and manifest are stored separately under
+`<DATA_PATH>\epc\england_wales\domestic\raw.zip` or
+`<DATA_PATH>\epc\england_wales\non_domestic\raw.zip`. Runs skip an unchanged
+publication based on the provider's `lastUpdated` value. Use `--no-download`
+to reprocess an accepted archive, for example
+`python -m ingestion.epc.england_wales.pipeline --dataset non_domestic --no-download`.
+Batch size defaults to 50,000 rows and can be changed with `EPC_BATCH_ROWS`.
+Existing archives under the previous `<DATA_PATH>\epc\domestic` and
+`<DATA_PATH>\epc\non_domestic` paths remain available to no-download runs.
 
 CSV members whose names start with `certificates` and `recommendations` are
 loaded separately into `bronze.epc.certificates` and
-`bronze.epc.recommendations`. Both formats must be present in the archive.
+`bronze.epc.recommendations` for domestic data. Both formats must be present
+in that archive. Non-domestic CSV members are loaded into
+`bronze.epc.non_domestic`.
 Upload files are stored in the managed Volume `/Volumes/bronze/epc/files`.
 Set `DATABRICKS_EPC_SCHEMA` to change the schema or
 `DATABRICKS_EPC_RAW_VOLUME_PATH` when the EPC Volume uses a custom path. EPC
 run outcomes and per-table row counts are appended to
-`<DATA_PATH>\epc\run_log.jsonl` and the shared
+`<DATA_PATH>\epc\england_wales\run_log.jsonl` and the shared
 `bronze.audit.ingestion_runs` table.
+
+## Scotland EPC ingestion
+
+The Scotland pipeline downloads the domestic and non-domestic current and
+extended-history resources to `<DATA_PATH>\epc\scotland`. The data.gov.scot
+downloads are 7z archives, extracted and streamed into the configured EPC
+schema in batches. Install dependencies from `requirements.txt`, including
+`py7zr`, before running:
+
+```powershell
+python -m ingestion.epc.scotland.fetch_epc
+```
+
+Run one resource with `--dataset domestic_current`,
+`non_domestic_current`, `domestic_extended`, or `non_domestic_extended`.
+Use `--no-download` to process accepted archives again, or `--refresh` to
+download the resources again. Each resource loads into its own table:
+`scotland_domestic_current`, `scotland_non_domestic_current`,
+`scotland_domestic_extended`, and `scotland_non_domestic_extended`, avoiding
+overwriting or combining the current and extended-history sources. Run logs
+are appended to `<DATA_PATH>\epc\scotland\run_log.jsonl`.
 
 ## Land Registry Price Paid ingestion
 
