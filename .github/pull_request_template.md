@@ -27,7 +27,6 @@
 - [ ] Tests written / updated
 - [ ] Tests passing
 - [ ] No new build or lint warnings
-- [ ] Migrations included (if schema changed)
 - [ ] No secrets or connection strings committed
 
 ## Notes
