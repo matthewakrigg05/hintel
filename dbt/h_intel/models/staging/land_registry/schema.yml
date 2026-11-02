@@ -1,0 +1,59 @@
+version: 2
+
+models:
+  - name: stg_price_paid
+    description: >
+      Silver Price Paid transactions with whitespace normalized, blank strings
+      converted to nulls, and source values cast to analytical types. Records
+      are retained for data-quality checks; invalid numeric and date values
+      become null.
+    columns:
+      - name: transaction_id
+        description: Stable HM Land Registry transaction identifier.
+        data_tests:
+          - not_null
+          - unique
+      - name: price_gbp
+        description: Sale price in pounds sterling.
+        data_tests:
+          - not_null
+      - name: date_of_transfer
+        description: Transaction completion date.
+        data_tests:
+          - not_null
+      - name: postcode
+        description: Normalized property postcode.
+      - name: property_type
+        description: Uppercase HM Land Registry property type code.
+      - name: old_new
+        description: Uppercase HM Land Registry new-build indicator.
+      - name: duration
+        description: Uppercase HM Land Registry tenure code.
+      - name: paon
+        description: Primary addressable object name.
+      - name: saon
+        description: Secondary addressable object name.
+      - name: street
+        description: Street name.
+      - name: locality
+        description: Locality.
+      - name: town_city
+        description: Town or city.
+      - name: district
+        description: Administrative district.
+      - name: county
+        description: County.
+      - name: ppd_category_type
+        description: Uppercase Price Paid Data category code.
+      - name: record_status
+        description: Uppercase Price Paid Data record status code.
+      - name: ingested_at
+        description: UTC timestamp when the record was loaded into Bronze.
+      - name: source_dataset
+        description: Stable identifier of the ingestion dataset.
+      - name: source_file
+        description: Local path of the accepted source file.
+      - name: source_sha256
+        description: SHA-256 checksum of the accepted source file.
+      - name: publication_period
+        description: Publication period associated with the source file.
