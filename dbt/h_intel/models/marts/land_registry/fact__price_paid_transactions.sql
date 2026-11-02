@@ -1,17 +1,17 @@
-select
+SELECT
     transaction_id,
     date_of_transfer,
-    cast(date_trunc('month', date_of_transfer) as date) as transfer_month,
-    year(date_of_transfer) as transfer_year,
-    month(date_of_transfer) as transfer_month_number,
+    CAST(DATE_TRUNC('month', date_of_transfer) AS DATE) AS transfer_month,
+    YEAR(date_of_transfer) AS transfer_year,
+    MONTH(date_of_transfer) AS transfer_month_number,
     price_gbp,
     postcode,
     property_type,
     old_new,
-    case
-        when old_new = 'Y' then true
-        when old_new = 'N' then false
-    end as is_new_build,
+    CASE
+        WHEN old_new = 'Y' THEN TRUE
+        WHEN old_new = 'N' THEN FALSE
+    END AS is_new_build,
     duration,
     paon,
     saon,
@@ -27,4 +27,4 @@ select
     source_file,
     source_sha256,
     publication_period
-from {{ ref('stg_price_paid') }}
+FROM {{ ref('stg_price_paid') }}

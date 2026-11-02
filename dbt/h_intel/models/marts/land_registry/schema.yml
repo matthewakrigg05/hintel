@@ -1,7 +1,7 @@
 version: 2
 
 models:
-  - name: fct_price_paid_transactions
+  - name: fact__price_paid_transactions
     description: >
       Gold transaction-level fact table for Price Paid Data, with calendar
       attributes and a boolean new-build indicator derived from the source code.
@@ -28,7 +28,7 @@ models:
       - name: is_new_build
         description: True for source code Y, false for N, and null for other codes.
 
-  - name: agg_price_paid_monthly_by_area
+  - name: fact__month_area_price_paid
     description: >
       Monthly transaction counts and price statistics by county, district,
       town or city, and property type. Rows with invalid dates or non-positive

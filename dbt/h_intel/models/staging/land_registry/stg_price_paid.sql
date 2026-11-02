@@ -1,28 +1,28 @@
-with source as (
-    select *
-    from {{ source('land_registry', 'price_paid') }}
+WITH source AS (
+    SELECT *
+    FROM {{ source('land_registry', 'price_paid') }}
 )
 
-select
-    nullif(trim(transaction_id), '') as transaction_id,
-    try_cast(nullif(trim(price), '') as decimal(18, 2)) as price_gbp,
-    try_cast(nullif(trim(date_of_transfer), '') as date) as date_of_transfer,
-    nullif(upper(trim(postcode)), '') as postcode,
-    nullif(upper(trim(property_type)), '') as property_type,
-    nullif(upper(trim(old_new)), '') as old_new,
-    nullif(upper(trim(duration)), '') as duration,
-    nullif(trim(paon), '') as paon,
-    nullif(trim(saon), '') as saon,
-    nullif(trim(street), '') as street,
-    nullif(trim(locality), '') as locality,
-    nullif(trim(town_city), '') as town_city,
-    nullif(trim(district), '') as district,
-    nullif(trim(county), '') as county,
-    nullif(upper(trim(ppd_category_type)), '') as ppd_category_type,
-    nullif(upper(trim(record_status)), '') as record_status,
-    try_cast(nullif(trim(_ingested_at), '') as timestamp) as ingested_at,
-    nullif(trim(_source_dataset), '') as source_dataset,
-    nullif(trim(_source_file), '') as source_file,
-    nullif(trim(_source_sha256), '') as source_sha256,
-    nullif(trim(_publication_period), '') as publication_period
-from source
+SELECT
+    NULLIF(TRIM(transaction_id), '') AS transaction_id,
+    TRY_CAST(NULLIF(TRIM(price), '') AS DECIMAL(18, 2)) AS price_gbp,
+    TRY_CAST(NULLIF(TRIM(date_of_transfer), '') AS DATE) AS date_of_transfer,
+    NULLIF(UPPER(TRIM(postcode)), '') AS postcode,
+    NULLIF(UPPER(TRIM(property_type)), '') AS property_type,
+    NULLIF(UPPER(TRIM(old_new)), '') AS old_new,
+    NULLIF(UPPER(TRIM(duration)), '') AS duration,
+    NULLIF(TRIM(paon), '') AS paon,
+    NULLIF(TRIM(saon), '') AS saon,
+    NULLIF(TRIM(street), '') AS street,
+    NULLIF(TRIM(locality), '') AS locality,
+    NULLIF(TRIM(town_city), '') AS town_city,
+    NULLIF(TRIM(district), '') AS district,
+    NULLIF(TRIM(county), '') AS county,
+    NULLIF(UPPER(TRIM(ppd_category_type)), '') AS ppd_category_type,
+    NULLIF(UPPER(TRIM(record_status)), '') AS record_status,
+    TRY_CAST(NULLIF(TRIM(_ingested_at), '') AS TIMESTAMP) AS ingested_at,
+    NULLIF(TRIM(_source_dataset), '') AS source_dataset,
+    NULLIF(TRIM(_source_file), '') AS source_file,
+    NULLIF(TRIM(_source_sha256), '') AS source_sha256,
+    NULLIF(TRIM(_publication_period), '') AS publication_period
+FROM source

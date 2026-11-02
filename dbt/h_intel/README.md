@@ -11,8 +11,8 @@ pipelines. dbt builds the first Price Paid slice through Silver and Gold:
 | --- | --- | --- |
 | Bronze | `land_registry.price_paid` source | `bronze.land_registry.price_paid` |
 | Silver | `stg_price_paid` view | `silver.<target_schema>_staging.stg_price_paid` |
-| Gold | `fct_price_paid_transactions` table | `gold.<target_schema>_marts.fct_price_paid_transactions` |
-| Gold | `agg_price_paid_monthly_by_area` table | `gold.<target_schema>_marts.agg_price_paid_monthly_by_area` |
+| Gold | `fact__price_paid_transactions` table | `gold.<target_schema>_marts.fact__price_paid_transactions` |
+| Gold | `fact__month_area_price_paid` table | `gold.<target_schema>_marts.fact__month_area_price_paid` |
 
 `stg_price_paid` trims strings, changes blank values to null, standardizes
 source codes, and casts price, transfer date, and ingestion timestamp. It
