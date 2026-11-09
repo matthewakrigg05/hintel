@@ -1,0 +1,54 @@
+version: 2
+
+models:
+  - name: fact__price_paid_transactions
+    description: >
+      Gold transaction-level fact table for Price Paid Data, with calendar
+      attributes and a boolean new-build indicator derived from the source code.
+    columns:
+      - name: transaction_id
+        description: Stable HM Land Registry transaction identifier.
+        data_tests:
+          - not_null
+          - unique
+      - name: date_of_transfer
+        description: Transaction completion date.
+        data_tests:
+          - not_null
+      - name: transfer_month
+        description: First day of the transaction's calendar month.
+      - name: transfer_year
+        description: Calendar year of the transaction.
+      - name: transfer_month_number
+        description: Calendar month number of the transaction.
+      - name: price_gbp
+        description: Sale price in pounds sterling.
+        data_tests:
+          - not_null
+      - name: is_new_build
+        description: True for source code Y, false for N, and null for other codes.
+
+  - name: fact__month_area_price_paid
+    description: >
+      Monthly transaction counts and price statistics by county, district,
+      town or city, and property type. Rows with invalid dates or non-positive
+      prices are excluded from these metrics.
+    columns:
+      - name: transfer_month
+        description: First day of the transaction's calendar month.
+        data_tests:
+          - not_null
+      - name: county
+        description: County from the transaction address.
+      - name: district
+        description: Administrative district from the transaction address.
+      - name: town_city
+        description: Town or city from the transaction address.
+      - name: property_type
+        description: HM Land Registry property type code.
+      - name: transaction_count
+        description: Number of valid transactions in the area and month.
+      - name: average_price_gbp
+        description: Arithmetic mean of transaction prices in pounds sterling.
+      - name: median_price_gbp
+        description: Approximate median of transaction prices in pounds sterling.

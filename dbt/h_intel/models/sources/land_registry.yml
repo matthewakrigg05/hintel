@@ -1,0 +1,55 @@
+version: 2
+
+sources:
+  - name: land_registry
+    description: Raw HM Land Registry datasets loaded by the ingestion pipelines.
+    database: bronze
+    schema: land_registry
+    tables:
+      - name: price_paid
+        description: >
+          Price Paid Data transactions. All source and ingestion metadata
+          columns are stored as strings in Bronze.
+        columns:
+          - name: transaction_id
+            description: Stable identifier for the property transaction.
+          - name: price
+            description: Sale price in pounds sterling.
+          - name: date_of_transfer
+            description: Date the transaction completed, in ISO date format.
+          - name: postcode
+            description: Postcode for the property.
+          - name: property_type
+            description: Property type code supplied by HM Land Registry.
+          - name: old_new
+            description: Whether the property was new build or established.
+          - name: duration
+            description: Tenure code supplied by HM Land Registry.
+          - name: paon
+            description: Primary addressable object name.
+          - name: saon
+            description: Secondary addressable object name.
+          - name: street
+            description: Street name.
+          - name: locality
+            description: Locality.
+          - name: town_city
+            description: Town or city.
+          - name: district
+            description: Administrative district.
+          - name: county
+            description: County.
+          - name: ppd_category_type
+            description: Price Paid Data category code.
+          - name: record_status
+            description: Price Paid Data record status code.
+          - name: _ingested_at
+            description: UTC timestamp when the record was loaded into Bronze.
+          - name: _source_dataset
+            description: Stable identifier of the ingestion dataset.
+          - name: _source_file
+            description: Local path of the accepted source file.
+          - name: _source_sha256
+            description: SHA-256 checksum of the accepted source file.
+          - name: _publication_period
+            description: Publication period associated with the source file.
