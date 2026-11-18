@@ -8,7 +8,7 @@ from urllib.parse import urlparse
 
 import requests
 
-from ingestion.common.download import download_file
+from ingestion.common.download import download_file, calculate_sha256
 from ingestion.common.http import get_json
 from ingestion.common.storage import data_root, prepare_dataset_dir
 
@@ -19,15 +19,6 @@ HPI_BASE_URL = (
     "https://publicdata.landregistry.gov.uk/"
     "market-trend-data/house-price-index-data"
 )
-
-
-def _sha256(path: Path) -> str:
-    """Calculate the SHA-256 checksum of a local file."""
-    digest = hashlib.sha256()
-    with path.open("rb") as source:
-        for chunk in iter(lambda: source.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def _csv_details(path: Path) -> tuple[list[str], int]:
@@ -262,7 +253,7 @@ def save_downloaded_dataset(dataset_id: str, source_url: str, period: str | None
         "file_size": temporary.stat().st_size,
         "row_count": row_count,
         "columns": columns,
-        "sha256": _sha256(temporary),
+        "sha256": calculate_sha256(temporary),
         "accepted_at": datetime.now(timezone.utc).isoformat(),
     }
     temporary.replace(destination)

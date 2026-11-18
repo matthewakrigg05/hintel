@@ -6,7 +6,7 @@ from pathlib import Path
 
 import requests
 
-from ingestion.common.download import download_file
+from ingestion.common.download import download_file, calculate_sha256
 from ingestion.common.storage import data_root, prepare_dataset_dir
 
 from .config import (
@@ -16,14 +16,6 @@ from .config import (
     PRICE_PAID_END_YEAR,
     PRICE_PAID_START_YEAR,
 )
-
-
-def _sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as source:
-        for chunk in iter(lambda: source.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def _csv_details(path: Path) -> tuple[list[str], int]:
@@ -135,7 +127,7 @@ def save_downloaded_dataset(year: int, source_url: str, refresh: bool = False) -
         "file_size": temporary.stat().st_size,
         "row_count": row_count,
         "columns": columns,
-        "sha256": _sha256(temporary),
+        "sha256": calculate_sha256(temporary),
         "accepted_at": datetime.now(timezone.utc).isoformat(),
     }
     temporary.replace(destination)
