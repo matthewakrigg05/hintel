@@ -7,7 +7,12 @@ from pathlib import Path
 
 from ingestion.common.download import calculate_sha256, download_file
 from ingestion.common.http import get_json
-from ingestion.common.storage import data_root, prepare_dataset_dir
+from ingestion.common.storage import (
+	data_root,
+	load_manifest,
+	prepare_dataset_dir,
+	write_manifest,
+)
 
 from .config import *
 
@@ -18,10 +23,6 @@ def _dataset_dir(dataset: str = "domestic") -> Path:
 	return prepare_dataset_dir(dataset, "epc", "england_wales")
 
 
-def _manifest_path(dataset: str = "domestic") -> Path:
-	return _dataset_dir(dataset) / "manifest.json"
-
-
 def _legacy_dataset_dir(dataset: str = "domestic") -> Path:
 	if dataset not in EPC_DATASET_IDS:
 		raise ValueError(f"Unsupported EPC dataset: {dataset}")
@@ -29,29 +30,20 @@ def _legacy_dataset_dir(dataset: str = "domestic") -> Path:
 
 
 def _load_manifest(dataset: str = "domestic") -> dict | None:
-	path = _manifest_path(dataset)
-	if not path.exists():
-		path = _legacy_dataset_dir(dataset) / "manifest.json"
-	if not path.exists():
-		return None
-	return json.loads(path.read_text(encoding="utf-8"))
+	manifest = load_manifest(_dataset_dir(dataset))
+	if manifest is not None:
+		return manifest
+	return load_manifest(_legacy_dataset_dir(dataset))
 
 
 def get_dataset_manifest(dataset: str = "domestic") -> dict | None:
 	return _load_manifest(dataset)
 
 
-def _write_manifest(details: dict, dataset: str = "domestic") -> None:
-	path = _manifest_path(dataset)
-	temporary = path.with_suffix(".json.part")
-	temporary.write_text(json.dumps(details, indent=2) + "\n", encoding="utf-8")
-	temporary.replace(path)
-
-
 def update_dataset_manifest(dataset: str = "domestic", **details: object) -> dict:
 	manifest = _load_manifest(dataset) or {}
 	manifest.update(details)
-	_write_manifest(manifest, dataset)
+	write_manifest(_dataset_dir(dataset), manifest)
 	return manifest
 
 
@@ -152,7 +144,7 @@ def save_downloaded_dataset(
 			"accepted_at": datetime.now(timezone.utc).isoformat(),
 		}
 		temporary.replace(destination)
-		_write_manifest(details, dataset)
+		write_manifest(dataset_dir, details)
 		return destination
 	except Exception:
 		temporary.unlink(missing_ok=True)

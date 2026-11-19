@@ -1,5 +1,4 @@
 import csv
-import hashlib
 import json
 from datetime import datetime, timezone
 from datetime import date
@@ -10,15 +9,14 @@ import requests
 
 from ingestion.common.download import download_file, calculate_sha256
 from ingestion.common.http import get_json
-from ingestion.common.storage import data_root, prepare_dataset_dir
-
-from .config import LAND_REGISTRY_API_KEY
-
-
-HPI_BASE_URL = (
-    "https://publicdata.landregistry.gov.uk/"
-    "market-trend-data/house-price-index-data"
+from ingestion.common.storage import (
+    data_root,
+    load_manifest,
+    prepare_dataset_dir,
+    write_manifest,
 )
+
+from .config import HPI_BASE_URL, LAND_REGISTRY_API_KEY
 
 
 def _csv_details(path: Path) -> tuple[list[str], int]:
@@ -30,19 +28,6 @@ def _csv_details(path: Path) -> tuple[list[str], int]:
     return columns, row_count
 
 
-def _manifest_path(dataset_dir: Path) -> Path:
-    """Return the path of the accepted-file manifest for a dataset."""
-    return dataset_dir / "manifest.json"
-
-
-def _load_manifest(dataset_dir: Path) -> dict | None:
-    """Load a dataset manifest, returning ``None`` before first acceptance."""
-    path = _manifest_path(dataset_dir)
-    if not path.exists():
-        return None
-    return json.loads(path.read_text(encoding="utf-8"))
-
-
 def is_download_current(dataset_id: str, source_url: str) -> bool:
     """Return whether the accepted raw CSV already matches a source URL.
 
@@ -50,7 +35,7 @@ def is_download_current(dataset_id: str, source_url: str) -> bool:
     makes a rerun safe when discovery returns the same published version.
     """
     dataset_dir = prepare_dataset_dir(dataset_id, "land_registry", "hpi")
-    manifest = _load_manifest(dataset_dir)
+    manifest = load_manifest(dataset_dir)
     return bool(
         manifest
         and (dataset_dir / "raw.csv").exists()
@@ -61,14 +46,7 @@ def is_download_current(dataset_id: str, source_url: str) -> bool:
 def get_dataset_manifest(dataset_id: str) -> dict | None:
     """Return the accepted manifest for a dataset, if one exists."""
     dataset_dir = prepare_dataset_dir(dataset_id, "land_registry", "hpi")
-    return _load_manifest(dataset_dir)
-
-
-def _write_manifest(dataset_dir: Path, details: dict) -> None:
-    """Atomically write metadata for the newly accepted raw file."""
-    temporary = _manifest_path(dataset_dir).with_suffix(".json.part")
-    temporary.write_text(json.dumps(details, indent=2) + "\n", encoding="utf-8")
-    temporary.replace(_manifest_path(dataset_dir))
+    return load_manifest(dataset_dir)
 
 
 def append_run_log(dataset_id: str, status: str, **details: object) -> None:
@@ -223,7 +201,7 @@ def save_downloaded_dataset(dataset_id: str, source_url: str, period: str | None
     download_url, file_type = resolve_download_url(source_url, headers=headers)
     dataset_dir = prepare_dataset_dir(dataset_id, "land_registry", "hpi")
     destination = dataset_dir / f"raw.{file_type}"
-    previous = _load_manifest(dataset_dir)
+    previous = load_manifest(dataset_dir)
     if previous and destination.exists() and previous.get("url") == download_url:
         print(f"Already retrieved {dataset_id} for {previous.get('period', download_url)}")
         return destination
@@ -257,5 +235,5 @@ def save_downloaded_dataset(dataset_id: str, source_url: str, period: str | None
         "accepted_at": datetime.now(timezone.utc).isoformat(),
     }
     temporary.replace(destination)
-    _write_manifest(dataset_dir, details)
+    write_manifest(dataset_dir, details)
     return destination
