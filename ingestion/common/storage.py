@@ -1,5 +1,6 @@
 import json
 import os
+from datetime import datetime, timezone
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -101,3 +102,12 @@ def update_manifest(
     manifest.update(details)
     write_manifest(dataset_dir, manifest, filename)
     return manifest
+
+
+def append_jsonl_event(parts: tuple[str, ...], event: dict[str, object]) -> None:
+    """Append a timestamped event to a JSONL file below the data root."""
+    log_path = data_root().joinpath(*parts, "run_log.jsonl")
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    record = {"timestamp": datetime.now(timezone.utc).isoformat(), **event}
+    with log_path.open("a", encoding="utf-8") as log:
+        log.write(json.dumps(record) + "\n")

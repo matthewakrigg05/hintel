@@ -1,5 +1,4 @@
 import csv
-import json
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -7,7 +6,7 @@ import requests
 
 from ingestion.common.download import download_file, calculate_sha256
 from ingestion.common.storage import (
-    data_root,
+    append_jsonl_event,
     load_manifest,
     prepare_dataset_dir,
     write_manifest,
@@ -48,16 +47,10 @@ def _write_manifest(year: int, details: dict) -> None:
 
 
 def append_run_log(status: str, **details: object) -> None:
-    log_path = data_root() / "land_registry" / "price_paid" / "run_log.jsonl"
-    log_path.parent.mkdir(parents=True, exist_ok=True)
-    event = {
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-        "dataset_id": PRICE_PAID_DATASET_ID,
-        "status": status,
-        **details,
-    }
-    with log_path.open("a", encoding="utf-8") as log:
-        log.write(json.dumps(event) + "\n")
+    append_jsonl_event(
+        ("land_registry", "price_paid"),
+        {"dataset_id": PRICE_PAID_DATASET_ID, "status": status, **details},
+    )
 
 
 def candidate_years():

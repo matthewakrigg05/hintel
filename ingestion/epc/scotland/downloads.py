@@ -1,4 +1,3 @@
-import json
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -6,7 +5,7 @@ import py7zr
 
 from ingestion.common.download import calculate_sha256, download_file
 from ingestion.common.storage import (
-    data_root,
+    append_jsonl_event,
     load_manifest,
     prepare_dataset_dir,
     update_manifest,
@@ -86,12 +85,7 @@ def update_dataset_manifest(dataset: str, **details: object) -> dict:
 
 
 def append_run_log(status: str, **details: object) -> None:
-    log_path = data_root() / "epc" / "scotland" / "run_log.jsonl"
-    log_path.parent.mkdir(parents=True, exist_ok=True)
-    event = {
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-        "status": status,
-        **details,
-    }
-    with log_path.open("a", encoding="utf-8") as log:
-        log.write(json.dumps(event) + "\n")
+    append_jsonl_event(
+        ("epc", "scotland"),
+        {"status": status, **details},
+    )

@@ -1,5 +1,4 @@
 import csv
-import json
 from datetime import datetime, timezone
 from datetime import date
 from pathlib import Path
@@ -10,7 +9,7 @@ import requests
 from ingestion.common.download import download_file, calculate_sha256
 from ingestion.common.http import get_json
 from ingestion.common.storage import (
-    data_root,
+    append_jsonl_event,
     load_manifest,
     prepare_dataset_dir,
     write_manifest,
@@ -58,16 +57,10 @@ def append_run_log(dataset_id: str, status: str, **details: object) -> None:
         **details: Serializable event fields such as period, row count, or
             an error message.
     """
-    log_path = data_root() / "land_registry" / "hpi" / "run_log.jsonl"
-    log_path.parent.mkdir(parents=True, exist_ok=True)
-    event = {
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-        "dataset_id": dataset_id,
-        "status": status,
-        **details,
-    }
-    with log_path.open("a", encoding="utf-8") as log:
-        log.write(json.dumps(event) + "\n")
+    append_jsonl_event(
+        ("land_registry", "hpi"),
+        {"dataset_id": dataset_id, "status": status, **details},
+    )
 
 
 def candidate_periods(lookback: int = 24):
