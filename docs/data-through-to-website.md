@@ -9,7 +9,6 @@ The two databases should not receive raw ingestion independently. Ingestion
 lands source data once, and Databricks produces curated analytical models. The
 required models are then published into PostgreSQL for the website.
 
-```text
 External sources
       |
       v
@@ -32,7 +31,6 @@ FastAPI
       |
       v
 Website
-```
 
 This matches the repository's existing medallion structure and separates
 analytical processing from low-latency application queries.
@@ -92,6 +90,31 @@ Gold models should be:
 - suitable for publication
 - separated by analytical subject and refresh period
 
+#### Analytical and website-serving models
+
+Gold models have two related consumers, and it is useful to distinguish their
+needs:
+
+- **Analytical models** support reporting, exploration, and future modelling.
+  They can retain detailed facts and reusable aggregates, such as transaction
+  history and monthly area statistics.
+- **Website-serving models** are shaped around API and website queries. They
+  should expose only the required fields, have stable keys and clear contracts,
+  and precompute results where that makes application queries simpler or faster.
+
+Both kinds of models should build on shared Silver cleaning and business rules;
+do not independently reimplement those rules for the website. Build serving
+models in dbt on Databricks, then publish the selected serving outputs to
+PostgreSQL. They are the application-facing contract, not a second source of
+truth.
+
+For example, the transaction fact and monthly area aggregate already in the
+project can remain useful analytical models. Website-serving models could
+additionally provide purpose-shaped postcode search results, property
+comparisons, or map summaries. The exact model organization can evolve as the
+number of models grows; keep the distinction based on their consumers and
+query needs.
+
 ### PostgreSQL and PostGIS
 
 PostgreSQL is the application serving store. It should contain curated copies
@@ -143,8 +166,8 @@ connecting to Databricks or external source datasets.
 1. Ingestion lands and validates the source.
 2. Bronze stores the source data.
 3. dbt builds Silver cleaning models.
-4. dbt builds or refreshes Gold models.
-5. A publication job selects the required Gold rows.
+4. dbt builds or refreshes analytical and website-serving Gold models.
+5. A publication job selects the required website-serving Gold outputs.
 6. PostgreSQL receives the batch using upserts or partition replacement.
 7. Publication status and lineage are recorded.
 8. The API begins serving the new version only after validation succeeds.
