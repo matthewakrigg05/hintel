@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from ingestion.common.download import download_and_accept
+from ingestion.land_registry.common import download_and_accept
 
 
 class DownloadAcceptanceTests(unittest.TestCase):
@@ -20,7 +20,7 @@ class DownloadAcceptanceTests(unittest.TestCase):
                 return path
 
             with patch(
-                "ingestion.common.download.download_file",
+                "ingestion.land_registry.common.download_file",
                 side_effect=write_download,
             ):
                 accepted_path, details = download_and_accept(
@@ -60,7 +60,7 @@ class DownloadAcceptanceTests(unittest.TestCase):
 
             with (
                 patch(
-                    "ingestion.common.download.download_file",
+                    "ingestion.land_registry.common.download_file",
                     side_effect=write_download,
                 ),
                 self.assertRaisesRegex(ValueError, "fewer rows"),

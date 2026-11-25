@@ -5,13 +5,13 @@ from urllib.parse import urlparse
 
 import requests
 
-from ingestion.common.download import download_and_accept
 from ingestion.common.http import get_json
 from ingestion.common.storage import (
     append_jsonl_event,
     load_manifest,
     prepare_dataset_dir,
 )
+from ingestion.land_registry.common import download_and_accept
 
 from .config import HPI_BASE_URL, LAND_REGISTRY_API_KEY
 

@@ -3,12 +3,12 @@ from pathlib import Path
 
 import requests
 
-from ingestion.common.download import download_and_accept
 from ingestion.common.storage import (
     append_jsonl_event,
     load_manifest,
     prepare_dataset_dir,
 )
+from ingestion.land_registry.common import download_and_accept
 
 from .config import (
     PRICE_PAID_BASE_URL,
