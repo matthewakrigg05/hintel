@@ -1,15 +1,13 @@
 import csv
-from datetime import datetime, timezone
 from pathlib import Path
 
 import requests
 
-from ingestion.common.download import download_file, calculate_sha256
+from ingestion.common.download import download_and_accept
 from ingestion.common.storage import (
     append_jsonl_event,
     load_manifest,
     prepare_dataset_dir,
-    write_manifest,
 )
 
 from .config import (
@@ -37,13 +35,6 @@ def _load_manifest(year: int) -> dict | None:
 
 def get_dataset_manifest(year: int) -> dict | None:
     return _load_manifest(year)
-
-
-def _write_manifest(year: int, details: dict) -> None:
-    dataset_dir = prepare_dataset_dir(
-        PRICE_PAID_DATASET_ID, "land_registry", "price_paid"
-    )
-    write_manifest(dataset_dir, details, f"manifest_{year}.json")
 
 
 def append_run_log(status: str, **details: object) -> None:
@@ -96,35 +87,23 @@ def save_downloaded_dataset(year: int, source_url: str, refresh: bool = False) -
         print(f"Already retrieved {PRICE_PAID_DATASET_ID} for {year}")
         return destination
 
-    temporary = dataset_dir / "raw.csv.candidate"
     print(f"Downloading {PRICE_PAID_DATASET_ID} for {year} from {source_url}")
-    download_file(source_url, temporary)
-    columns, row_count = _csv_details(temporary)
-    previous_size = previous.get("file_size", 0) if previous else 0
-    previous_rows = previous.get("row_count", 0) if previous else 0
-    if not columns or row_count == 0:
-        temporary.unlink(missing_ok=True)
-        raise ValueError(f"Downloaded Price Paid file is empty: {source_url}")
-    if previous and temporary.stat().st_size < previous_size:
-        temporary.unlink(missing_ok=True)
-        raise ValueError(f"New Price Paid file is smaller than the accepted file: {source_url}")
-    if previous and row_count < previous_rows:
-        temporary.unlink(missing_ok=True)
-        raise ValueError(f"New Price Paid file has fewer rows than the accepted file: {source_url}")
-
-    print(f"Validated {row_count:,} rows for {PRICE_PAID_DATASET_ID}")
-
-    details = {
-        "dataset_id": PRICE_PAID_DATASET_ID,
-        "url": source_url,
-        "period": str(year),
-        "file_type": "csv",
-        "file_size": temporary.stat().st_size,
-        "row_count": row_count,
-        "columns": columns,
-        "sha256": calculate_sha256(temporary),
-        "accepted_at": datetime.now(timezone.utc).isoformat(),
-    }
-    temporary.replace(destination)
-    _write_manifest(year, details)
+    _, accepted_details = download_and_accept(
+        source_url,
+        destination,
+        manifest_path=dataset_dir / f"manifest_{year}.json",
+        details={
+            "dataset_id": PRICE_PAID_DATASET_ID,
+            "url": source_url,
+            "period": str(year),
+            "file_type": "csv",
+        },
+        previous_manifest=previous,
+        source_name="Price Paid",
+        inspect_file=_csv_details,
+    )
+    print(
+        f"Validated {accepted_details['row_count']:,} rows "
+        f"for {PRICE_PAID_DATASET_ID}"
+    )
     return destination

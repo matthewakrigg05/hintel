@@ -1,18 +1,16 @@
 import csv
-from datetime import datetime, timezone
 from datetime import date
 from pathlib import Path
 from urllib.parse import urlparse
 
 import requests
 
-from ingestion.common.download import download_file, calculate_sha256
+from ingestion.common.download import download_and_accept
 from ingestion.common.http import get_json
 from ingestion.common.storage import (
     append_jsonl_event,
     load_manifest,
     prepare_dataset_dir,
-    write_manifest,
 )
 
 from .config import HPI_BASE_URL, LAND_REGISTRY_API_KEY
@@ -199,34 +197,19 @@ def save_downloaded_dataset(dataset_id: str, source_url: str, period: str | None
         print(f"Already retrieved {dataset_id} for {previous.get('period', download_url)}")
         return destination
 
-    temporary = destination.with_suffix(destination.suffix + ".candidate")
-
-    download_file(download_url, temporary, headers=headers)
-    columns, row_count = _csv_details(temporary)
-    previous_size = previous.get("file_size", 0) if previous else 0
-    previous_rows = previous.get("row_count", 0) if previous else 0
-
-    if not columns or row_count == 0:
-        temporary.unlink(missing_ok=True)
-        raise ValueError(f"Downloaded HPI file is empty: {download_url}")
-    if previous and temporary.stat().st_size < previous_size:
-        temporary.unlink(missing_ok=True)
-        raise ValueError(f"New HPI file is smaller than the accepted file: {download_url}")
-    if previous and row_count < previous_rows:
-        temporary.unlink(missing_ok=True)
-        raise ValueError(f"New HPI file has fewer rows than the accepted file: {download_url}")
-
-    details = {
-        "dataset_id": dataset_id,
-        "url": download_url,
-        "period": period,
-        "file_type": file_type,
-        "file_size": temporary.stat().st_size,
-        "row_count": row_count,
-        "columns": columns,
-        "sha256": calculate_sha256(temporary),
-        "accepted_at": datetime.now(timezone.utc).isoformat(),
-    }
-    temporary.replace(destination)
-    write_manifest(dataset_dir, details)
+    download_and_accept(
+        download_url,
+        destination,
+        manifest_path=dataset_dir / "manifest.json",
+        details={
+            "dataset_id": dataset_id,
+            "url": download_url,
+            "period": period,
+            "file_type": file_type,
+        },
+        previous_manifest=previous,
+        source_name="HPI",
+        inspect_file=_csv_details,
+        headers=headers,
+    )
     return destination

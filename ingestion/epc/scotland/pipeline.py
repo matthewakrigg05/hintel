@@ -12,7 +12,10 @@ import py7zr
 
 from ingestion.common.metadata import add_ingestion_metadata
 from ingestion.destinations.databricks.audit import new_run_id, write_ingestion_event
-from ingestion.destinations.databricks.databricks import RAW_CATALOG, bronze_write
+from ingestion.destinations.databricks.databricks import (
+    RAW_CATALOG,
+    write_bronze_batches,
+)
 
 if __package__ in {None, ""}:
     from ingestion.epc.scotland.config import EPC_BATCH_ROWS, EPC_SCHEMA, SCOTLAND_DATASETS
@@ -95,32 +98,27 @@ def ingest_archive(raw_path: Path, manifest: dict, dataset: str) -> int:
                 chunksize=EPC_BATCH_ROWS,
                 low_memory=False,
             )
-            for batch_number, frame in enumerate(chunks, start=1):
-                prepared = add_ingestion_metadata(
-                    frame,
-                    {
-                        "_source_dataset": f"epc_scotland_{dataset}",
-                        "_source_file": f"{raw_path}!{member_path.name}",
-                        "_source_sha256": checksum,
-                        "_publication_period": manifest.get("last_updated"),
-                    },
+            metadata = {
+                "_source_dataset": f"epc_scotland_{dataset}",
+                "_source_file": f"{raw_path}!{member_path.name}",
+                "_source_sha256": checksum,
+                "_publication_period": manifest.get("last_updated"),
+            }
+            batches = (
+                (
+                    f"{member_number}-{batch_number}",
+                    add_ingestion_metadata(frame, metadata),
                 )
-                result = bronze_write(
-                    prepared,
-                    catalog=RAW_CATALOG,
-                    schema=EPC_SCHEMA,
-                    table=definition["table"],
-                    key_cols=["_source_sha256"],
-                    batch_id=f"{member_number}-{batch_number}",
-                    volume_path=EPC_VOLUME_PATH,
-                )
-                row_count += result["row_count"]
-                print(
-                    f"Wrote Scottish EPC batch {member_number}-{batch_number}: "
-                    f"{result['row_count']:,} rows "
-                    f"({row_count:,} total)",
-                    flush=True,
-                )
+                for batch_number, frame in enumerate(chunks, start=1)
+            )
+            row_count += write_bronze_batches(
+                batches,
+                catalog=RAW_CATALOG,
+                schema=EPC_SCHEMA,
+                table=definition["table"],
+                key_cols=["_source_sha256"],
+                volume_path=EPC_VOLUME_PATH,
+            )
     if not row_count:
         raise ValueError(f"Scottish EPC {dataset} archive contained no data rows")
 

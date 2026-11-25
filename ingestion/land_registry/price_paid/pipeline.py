@@ -6,7 +6,11 @@ import pandas as pd
 from ingestion.common.metadata import add_ingestion_metadata
 from ingestion.common.storage import prepare_dataset_dir
 from ingestion.destinations.databricks.audit import new_run_id, write_ingestion_event
-from ingestion.destinations.databricks.databricks import RAW_CATALOG, RAW_SCHEMA, bronze_write
+from ingestion.destinations.databricks.databricks import (
+    RAW_CATALOG,
+    RAW_SCHEMA,
+    write_bronze_batches,
+)
 
 from .config import (
     PRICE_PAID_BATCH_ROWS,
@@ -106,27 +110,23 @@ def run(download: bool = True) -> dict[int, pd.DataFrame]:
                 f"Loaded {len(frame):,} rows and {len(frame.columns):,} columns "
                 f"for {PRICE_PAID_DATASET_ID} {year}"
             )
-            write_result = {"row_count": 0}
-            batch_count = max(1, (len(frame) + PRICE_PAID_BATCH_ROWS - 1) // PRICE_PAID_BATCH_ROWS)
-            for batch_number, start in enumerate(
-                range(0, len(frame), PRICE_PAID_BATCH_ROWS),
-                start=1,
-            ):
-                batch = frame.iloc[start : start + PRICE_PAID_BATCH_ROWS]
-                print(
-                    f"Writing batch {batch_number}/{batch_count} for "
-                    f"{PRICE_PAID_DATASET_ID} {year}: {len(batch):,} rows",
-                    flush=True,
+            batches = (
+                (
+                    f"{year}-{batch_number}",
+                    frame.iloc[start : start + PRICE_PAID_BATCH_ROWS],
                 )
-                batch_result = bronze_write(
-                    batch,
-                    catalog=RAW_CATALOG,
-                    schema=RAW_SCHEMA,
-                    table=PRICE_PAID_DATASET_ID,
-                    key_cols=["_source_sha256"],
-                    batch_id=f"{year}-{batch_number}",
+                for batch_number, start in enumerate(
+                    range(0, len(frame), PRICE_PAID_BATCH_ROWS),
+                    start=1,
                 )
-                write_result["row_count"] += batch_result["row_count"]
+            )
+            written_row_count = write_bronze_batches(
+                batches,
+                catalog=RAW_CATALOG,
+                schema=RAW_SCHEMA,
+                table=PRICE_PAID_DATASET_ID,
+                key_cols=["_source_sha256"],
+            )
             write_ingestion_event(
                 run_id,
                 PRICE_PAID_DATASET_ID,
@@ -134,7 +134,7 @@ def run(download: bool = True) -> dict[int, pd.DataFrame]:
                 source="land_registry_price_paid",
                 publication_period=frame.attrs.get("price_paid_period"),
                 manifest=manifest,
-                row_count=write_result["row_count"],
+                row_count=written_row_count,
             )
             append_run_log(run_id=run_id, status=status, period=str(year), row_count=len(frame))
             print(f"Completed {PRICE_PAID_DATASET_ID} {year}: {status}")

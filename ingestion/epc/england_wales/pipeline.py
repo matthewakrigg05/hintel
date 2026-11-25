@@ -12,7 +12,10 @@ import pandas as pd
 
 from ingestion.common.metadata import add_ingestion_metadata
 from ingestion.destinations.databricks.audit import new_run_id, write_ingestion_event
-from ingestion.destinations.databricks.databricks import RAW_CATALOG, bronze_write
+from ingestion.destinations.databricks.databricks import (
+    RAW_CATALOG,
+    write_bronze_batches,
+)
 
 if __package__ in {None, ""}:
     from ingestion.epc.config import EPC_BATCH_ROWS, EPC_SCHEMA
@@ -120,6 +123,7 @@ def ingest_archive(
                 f"{dataset_id}_{name}" if dataset == "domestic" else dataset_id
             )
             print(f"Processing EPC archive member {member_number}/{len(csv_members)}: {member.filename}")
+
             with archive.open(member) as source:
                 chunks = pd.read_csv(
                     source,
@@ -128,33 +132,30 @@ def ingest_archive(
                     chunksize=EPC_BATCH_ROWS,
                     low_memory=False,
                 )
-                for frame in chunks:
-                    batch_number += 1
-                    prepared = add_ingestion_metadata(
-                        frame,
-                        {
-                            "_source_dataset": source_dataset_id,
-                            "_source_file": f"{raw_path}!{member.filename}",
-                            "_source_sha256": checksum,
-                            "_publication_period": period,
-                        },
-                    )
-                    result = bronze_write(
-                        prepared,
-                        catalog=RAW_CATALOG,
-                        schema=EPC_SCHEMA,
-                        table=formats[name],
-                        key_cols=["_source_sha256"],
-                        batch_id=f"{member_number}-{batch_number}",
-                        volume_path=EPC_VOLUME_PATH,
-                    )
-                    row_counts[name] += result["row_count"]
-                    print(
-                        f"Wrote EPC batch {batch_number}: "
-                        f"{result['row_count']:,} rows "
-                        f"({name}: {row_counts[name]:,} total)",
-                        flush=True,
-                    )
+
+                def member_batches():
+                    nonlocal batch_number
+                    for frame in chunks:
+                        batch_number += 1
+                        prepared = add_ingestion_metadata(
+                            frame,
+                            {
+                                "_source_dataset": source_dataset_id,
+                                "_source_file": f"{raw_path}!{member.filename}",
+                                "_source_sha256": checksum,
+                                "_publication_period": period,
+                            },
+                        )
+                        yield f"{member_number}-{batch_number}", prepared
+
+                row_counts[name] += write_bronze_batches(
+                    member_batches(),
+                    catalog=RAW_CATALOG,
+                    schema=EPC_SCHEMA,
+                    table=formats[name],
+                    key_cols=["_source_sha256"],
+                    volume_path=EPC_VOLUME_PATH,
+                )
 
     if not any(row_counts.values()):
         raise ValueError(f"EPC {dataset} archive contained no data rows")
