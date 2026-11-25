@@ -2,7 +2,6 @@ import argparse
 import os
 import sys
 import tempfile
-from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath, PureWindowsPath
 
 if __package__ in {None, ""}:
@@ -12,7 +11,7 @@ import pandas as pd
 import py7zr
 
 from ingestion.common.metadata import add_ingestion_metadata
-from ingestion.destinations.databricks.audit import new_run_id, write_event
+from ingestion.destinations.databricks.audit import new_run_id, write_ingestion_event
 from ingestion.destinations.databricks.databricks import RAW_CATALOG, bronze_write
 
 if __package__ in {None, ""}:
@@ -129,42 +128,6 @@ def ingest_archive(raw_path: Path, manifest: dict, dataset: str) -> int:
     return row_count
 
 
-def _write_audit_event(
-    run_id: str,
-    dataset_id: str,
-    status: str,
-    *,
-    row_count: int | None = None,
-    manifest: dict | None = None,
-    error: str | None = None,
-) -> None:
-    manifest = manifest or {}
-    try:
-        write_event(
-            run_id,
-            dataset_id,
-            status,
-            source="epc_scotland",
-            source_url=manifest.get("url"),
-            publication_period=manifest.get("last_updated"),
-            row_count=row_count,
-            file_size_bytes=manifest.get("file_size"),
-            sha256=manifest.get("sha256"),
-            completed_at=datetime.now(timezone.utc),
-            error_message=error,
-        )
-    except (ImportError, RuntimeError, OSError) as audit_error:
-        print(f"Databricks audit unavailable; local log retained: {audit_error}")
-    except Exception as audit_error:
-        try:
-            from databricks.sql.exc import Error as DatabricksError
-        except ImportError:
-            raise audit_error
-        if not isinstance(audit_error, DatabricksError):
-            raise
-        print(f"Databricks audit unavailable; local log retained: {audit_error}")
-
-
 def run(
     download: bool = True,
     dataset: str = "all",
@@ -191,12 +154,14 @@ def run(
             count = ingest_archive(raw_path, manifest, name)
             row_counts[name] = count
             status = "success"
-            _write_audit_event(
+            write_ingestion_event(
                 run_id,
                 dataset_id,
                 status,
                 row_count=count,
                 manifest=manifest,
+                source="epc_scotland",
+                publication_period=manifest.get("last_updated"),
             )
             append_run_log(
                 status,
@@ -213,12 +178,14 @@ def run(
                 run_id=run_id,
                 error=str(error),
             )
-            _write_audit_event(
+            write_ingestion_event(
                 run_id,
                 dataset_id,
                 "failed",
                 manifest=manifest,
-                error=str(error),
+                source="epc_scotland",
+                publication_period=manifest.get("last_updated"),
+                error_message=str(error),
             )
             raise
     return row_counts

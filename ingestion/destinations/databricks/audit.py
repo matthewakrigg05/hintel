@@ -126,3 +126,42 @@ def write_event(
             cursor.execute(statement, values)
     finally:
         connection.close()
+
+
+def write_ingestion_event(
+    run_id: str,
+    dataset_id: str,
+    status: str,
+    *,
+    source: str,
+    publication_period: str | None = None,
+    row_count: int | None = None,
+    manifest: dict | None = None,
+    error_message: str | None = None,
+) -> None:
+    """Write an ingestion event, retaining local logs if Databricks is unavailable."""
+    manifest = manifest or {}
+    try:
+        write_event(
+            run_id,
+            dataset_id,
+            status,
+            source=source,
+            source_url=manifest.get("url"),
+            publication_period=publication_period,
+            row_count=row_count,
+            file_size_bytes=manifest.get("file_size"),
+            sha256=manifest.get("sha256"),
+            completed_at=datetime.now(timezone.utc),
+            error_message=error_message,
+        )
+    except (ImportError, RuntimeError, OSError) as error:
+        print(f"Databricks audit unavailable; local log retained: {error}")
+    except Exception as error:
+        try:
+            from databricks.sql.exc import Error as DatabricksError
+        except ImportError:
+            raise error
+        if not isinstance(error, DatabricksError):
+            raise
+        print(f"Databricks audit unavailable; local log retained: {error}")

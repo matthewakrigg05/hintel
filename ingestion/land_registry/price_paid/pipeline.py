@@ -1,12 +1,11 @@
 import argparse
-from datetime import datetime, timezone
 from pathlib import Path
 
 import pandas as pd
 
 from ingestion.common.metadata import add_ingestion_metadata
 from ingestion.common.storage import prepare_dataset_dir
-from ingestion.destinations.databricks.audit import new_run_id, write_event
+from ingestion.destinations.databricks.audit import new_run_id, write_ingestion_event
 from ingestion.destinations.databricks.databricks import RAW_CATALOG, RAW_SCHEMA, bronze_write
 
 from .config import (
@@ -128,42 +127,30 @@ def run(download: bool = True) -> dict[int, pd.DataFrame]:
                     batch_id=f"{year}-{batch_number}",
                 )
                 write_result["row_count"] += batch_result["row_count"]
-            _write_audit_event(
+            write_ingestion_event(
                 run_id,
+                PRICE_PAID_DATASET_ID,
                 status,
-                period=frame.attrs.get("price_paid_period"),
+                source="land_registry_price_paid",
+                publication_period=frame.attrs.get("price_paid_period"),
+                manifest=manifest,
                 row_count=write_result["row_count"],
-                source_url=manifest.get("url"),
-                file_size_bytes=manifest.get("file_size"),
-                sha256=manifest.get("sha256"),
             )
             append_run_log(run_id=run_id, status=status, period=str(year), row_count=len(frame))
             print(f"Completed {PRICE_PAID_DATASET_ID} {year}: {status}")
             results[year] = frame
         except Exception as error:
-            _write_audit_event(run_id, "failed", period=str(year), error=str(error))
+            write_ingestion_event(
+                run_id,
+                PRICE_PAID_DATASET_ID,
+                "failed",
+                source="land_registry_price_paid",
+                publication_period=str(year),
+                error_message=str(error),
+            )
             append_run_log(run_id=run_id, status="failed", period=str(year), error=str(error))
             raise
     return results
-
-
-def _write_audit_event(run_id: str, status: str, **details: object) -> None:
-    try:
-        write_event(
-            run_id,
-            PRICE_PAID_DATASET_ID,
-            status,
-            source="land_registry_price_paid",
-            publication_period=details.get("period"),
-            source_url=details.get("source_url"),
-            row_count=details.get("row_count"),
-            file_size_bytes=details.get("file_size_bytes"),
-            sha256=details.get("sha256"),
-            completed_at=datetime.now(timezone.utc),
-            error_message=details.get("error"),
-        )
-    except (ImportError, RuntimeError, OSError) as error:
-        print(f"Databricks audit unavailable; local log retained: {error}")
 
 
 def main() -> None:

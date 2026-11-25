@@ -1,12 +1,11 @@
 import argparse
-from datetime import datetime, timezone
 from pathlib import Path
 
 import pandas as pd
 
 from ingestion.common.metadata import add_ingestion_metadata
 from ingestion.common.storage import prepare_dataset_dir
-from ingestion.destinations.databricks.audit import new_run_id, write_event
+from ingestion.destinations.databricks.audit import new_run_id, write_ingestion_event
 from ingestion.destinations.databricks.databricks import RAW_CATALOG, RAW_SCHEMA, bronze_write
 
 from .config import LAND_REGISTRY_DATASETS
@@ -134,15 +133,14 @@ def run_land_registry_all(download: bool = True) -> dict[str, pd.DataFrame]:
                 table=dataset_id,
                 key_cols=["_source_sha256"],
             )
-            _write_audit_event(
+            write_ingestion_event(
                 run_id,
                 dataset_id,
                 status,
-                period=frame.attrs.get("hpi_period"),
+                source="land_registry_hpi",
+                publication_period=frame.attrs.get("hpi_period"),
+                manifest=manifest,
                 row_count=write_result["row_count"],
-                source_url=manifest.get("url"),
-                file_size_bytes=manifest.get("file_size"),
-                sha256=manifest.get("sha256"),
             )
             append_run_log(
                 dataset_id,
@@ -153,29 +151,16 @@ def run_land_registry_all(download: bool = True) -> dict[str, pd.DataFrame]:
             )
             print(f"Completed {dataset_id}: {status}")
         except Exception as error:
-            _write_audit_event(run_id, dataset_id, "failed", error=str(error))
+            write_ingestion_event(
+                run_id,
+                dataset_id,
+                "failed",
+                source="land_registry_hpi",
+                error_message=str(error),
+            )
             append_run_log(dataset_id, "failed", run_id=run_id, error=str(error))
             raise
     return results
-
-
-def _write_audit_event(run_id: str, dataset_id: str, status: str, **details: object) -> None:
-    """Write to Databricks when configured, retaining local logging as fallback."""
-    try:
-        write_event(
-            run_id,
-            dataset_id,
-            status,
-            publication_period=details.get("period"),
-            source_url=details.get("source_url"),
-            row_count=details.get("row_count"),
-            file_size_bytes=details.get("file_size_bytes"),
-            sha256=details.get("sha256"),
-            completed_at=datetime.now(timezone.utc),
-            error_message=details.get("error"),
-        )
-    except (ImportError, RuntimeError, OSError) as error:
-        print(f"Databricks audit unavailable; local log retained: {error}")
 
 
 def main() -> None:
