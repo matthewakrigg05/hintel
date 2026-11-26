@@ -25,12 +25,17 @@ seeds:
 models:
   h_intel:
     +static_analysis: strict
-    # Materialize staging models as views, and marts as tables
-    staging:
+    # Bronze contains source declarations for ingestion-owned raw tables.
+    # Materialize Silver as views and both Gold layers as tables.
+    silver:
       +materialized: view
       +database: silver
       +schema: staging
-    marts:
+    gold_analytics:
       +materialized: table
       +database: gold
-      +schema: marts
+      +schema: analytics
+    gold_serving:
+      +materialized: table
+      +database: gold
+      +schema: serving

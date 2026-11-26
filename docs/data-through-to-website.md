@@ -78,8 +78,8 @@ The Price Paid staging model is already an example of this boundary.
 Gold contains models intended for specific analytical or application purposes.
 Good examples in this repository are:
 
-- [Price Paid transaction fact](../dbt/h_intel/models/marts/land_registry/fact__price_paid_transactions.sql)
-- [Monthly area Price Paid aggregate](../dbt/h_intel/models/marts/land_registry/fact__month_area_price_paid.sql)
+- [Price Paid transaction fact](../dbt/h_intel/models/gold_analytics/land_registry/fact__price_paid_transactions.sql)
+- [Monthly area Price Paid aggregate](../dbt/h_intel/models/gold_analytics/land_registry/fact__month_area_price_paid.sql)
 
 Gold models should be:
 
@@ -109,11 +109,11 @@ PostgreSQL. They are the application-facing contract, not a second source of
 truth.
 
 For example, the transaction fact and monthly area aggregate already in the
-project can remain useful analytical models. Website-serving models could
-additionally provide purpose-shaped postcode search results, property
-comparisons, or map summaries. The exact model organization can evolve as the
-number of models grows; keep the distinction based on their consumers and
-query needs.
+project can remain useful analytical models. Gold Serving models should provide
+purpose-shaped PostgreSQL-ready data for website needs such as postcode search
+results, property comparisons, or map summaries. The dbt project keeps these
+groups in separate `gold_analytics` and `gold_serving` model directories; keep
+the distinction based on their consumers and query needs.
 
 ### PostgreSQL and PostGIS
 

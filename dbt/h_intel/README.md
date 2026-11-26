@@ -1,18 +1,20 @@
 # hIntel dbt project
 
-This project contains the SQL transformations for hIntel housing data. Ingestion pipelines load source data into the bronze Databricks catalog, and dbt builds the staging, analytics, and feature models consumed by the hIntel application.
+This project contains the SQL transformations for hIntel housing data. Ingestion pipelines load source data into the bronze Databricks catalog, and dbt organizes source declarations and models into Bronze, Silver, Gold Analytics, and Gold Serving layers.
 
 ## Medallion layers
 
 Raw ingestion tables are the Bronze layer and remain owned by the ingestion
-pipelines. dbt builds the first Price Paid slice through Silver and Gold:
+pipelines. Source declarations live in `models/bronze/`; dbt builds the first
+Price Paid slice through Silver and Gold Analytics:
 
 | Layer | dbt model or source | Relation |
 | --- | --- | --- |
 | Bronze | `land_registry.price_paid` source | `bronze.land_registry.price_paid` |
-| Silver | `stg_price_paid` view | `silver.<target_schema>_staging.stg_price_paid` |
-| Gold | `fact__price_paid_transactions` table | `gold.<target_schema>_marts.fact__price_paid_transactions` |
-| Gold | `fact__month_area_price_paid` table | `gold.<target_schema>_marts.fact__month_area_price_paid` |
+| Silver | `stg_price_paid` view (`models/silver/`) | `silver.<target_schema>_staging.stg_price_paid` |
+| Gold Analytics | `fact__price_paid_transactions` table (`models/gold_analytics/`) | `gold.<target_schema>_analytics.fact__price_paid_transactions` |
+| Gold Analytics | `fact__month_area_price_paid` table (`models/gold_analytics/`) | `gold.<target_schema>_analytics.fact__month_area_price_paid` |
+| Gold Serving | Placeholder (`models/gold_serving/`) | No models yet |
 
 `stg_price_paid` trims strings, changes blank values to null, standardizes
 source codes, and casts price, transfer date, and ingestion timestamp. It
@@ -23,10 +25,12 @@ without a valid transfer date or positive price and reports transaction count,
 average, approximate median, minimum, and maximum price by location and
 property type.
 
-The Silver and Gold names above are separate Databricks catalogs configured in
-`dbt_project.yml`; `<target_schema>` is the schema from the active `h_intel`
-profile. The active identity needs permission to read Bronze and create models
-in both catalogs.
+Bronze, Silver, and Gold are separate Databricks catalogs configured in
+`dbt_project.yml`. Gold Analytics and Gold Serving use separate schemas within
+the `gold` catalog; `<target_schema>` is the schema from the active `h_intel`
+profile. Gold Serving is reserved for models published to PostgreSQL for
+application and website queries. The active identity needs permission to read
+Bronze and create models in Silver and Gold.
 
 ## Getting started
 
