@@ -12,29 +12,15 @@ import py7zr
 
 from ingestion.common.metadata import add_ingestion_metadata
 from ingestion.destinations.databricks.audit import new_run_id, write_ingestion_event
-from ingestion.destinations.databricks.databricks import (
-    RAW_CATALOG,
-    write_bronze_batches,
+from ingestion.destinations.databricks.databricks import RAW_CATALOG, write_bronze_batches
+from ingestion.epc.scotland.config import EPC_BATCH_ROWS, EPC_SCHEMA, SCOTLAND_DATASETS
+from ingestion.epc.scotland.downloads import (
+    append_run_log,
+    existing_raw_path,
+    get_dataset_manifest,
+    save_downloaded_dataset,
+    update_dataset_manifest,
 )
-
-if __package__ in {None, ""}:
-    from ingestion.epc.scotland.config import EPC_BATCH_ROWS, EPC_SCHEMA, SCOTLAND_DATASETS
-    from ingestion.epc.scotland.downloads import (
-        append_run_log,
-        existing_raw_path,
-        get_dataset_manifest,
-        save_downloaded_dataset,
-        update_dataset_manifest,
-    )
-else:
-    from .config import EPC_BATCH_ROWS, EPC_SCHEMA, SCOTLAND_DATASETS
-    from .downloads import (
-        append_run_log,
-        existing_raw_path,
-        get_dataset_manifest,
-        save_downloaded_dataset,
-        update_dataset_manifest,
-    )
 
 
 EPC_VOLUME_PATH = os.getenv(

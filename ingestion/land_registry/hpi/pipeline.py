@@ -78,6 +78,7 @@ def ingest_dataset(dataset: dict, download: bool = True) -> pd.DataFrame:
         The loaded dataframe with ingestion metadata columns.
     """
     dataset_id = dataset["dataset_id"]
+    period = None
     if download:
         source_url, period = discover_latest_url(dataset["filename"])
         print(f"Using {period} for {dataset_id}")
