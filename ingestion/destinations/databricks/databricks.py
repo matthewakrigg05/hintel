@@ -4,6 +4,7 @@ import os
 import re
 import tempfile
 import time
+from collections.abc import Iterable
 from pathlib import Path
 from urllib.parse import quote
 
@@ -191,3 +192,38 @@ def bronze_write(
     elapsed = time.perf_counter() - started_at
     print(f"[bronze] {table}: complete in {elapsed:.1f}s", flush=True)
     return {"row_count": len(df), "table": f"{catalog}.{schema}.{table}"}
+
+
+def write_bronze_batches(
+    batches: Iterable[tuple[str, pd.DataFrame]],
+    *,
+    catalog: str,
+    schema: str,
+    table: str,
+    key_cols: list[str],
+    volume_path: str | None = None,
+) -> int:
+    """Write an iterator of identified dataframe batches and return rows written."""
+    row_count = 0
+    for batch_number, (batch_id, batch) in enumerate(batches, start=1):
+        print(
+            f"Writing batch {batch_number} ({batch_id}) for {table}: "
+            f"{len(batch):,} rows",
+            flush=True,
+        )
+        result = bronze_write(
+            batch,
+            catalog=catalog,
+            schema=schema,
+            table=table,
+            key_cols=key_cols,
+            batch_id=batch_id,
+            volume_path=volume_path,
+        )
+        row_count += result["row_count"]
+        print(
+            f"Wrote batch {batch_number} ({batch_id}) for {table}: "
+            f"{result['row_count']:,} rows ({row_count:,} total)",
+            flush=True,
+        )
+    return row_count

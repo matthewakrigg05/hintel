@@ -131,6 +131,10 @@ The project is planned around a modern data and AI product stack:
 - machine learning and AI layers for forecasting and explanation
 - cloud deployment with monitoring and CI/CD workflows
 
+See [PROJECT_STRUCTURE.txt](./PROJECT_STRUCTURE.txt) for the repository map and
+the intended flow from source ingestion through the core database, Databricks,
+dbt, and the application.
+
 ## Land Registry HPI ingestion
 
 The HPI pipeline uses stable dataset IDs and filename stems. The monthly

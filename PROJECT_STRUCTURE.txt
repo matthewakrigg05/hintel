@@ -1,0 +1,38 @@
+hIntel repository map
+=====================
+
+Current data and analytics workflow
+-----------------------------------
+
+ingestion/       Collect source data and deliver it to configured destinations.
+dbt/h_intel/     Transform data into staging, intermediate, and reporting models.
+Exploration/     Keep exploratory notebooks and analysis separate from production code.
+
+Planned application and platform areas
+---------------------------------------
+
+apps/web/                         Public website for area and property research.
+apps/web/tests/                   Website tests.
+services/api/                     Application API used by the website and future clients.
+services/api/tests/               API unit and integration tests.
+database/core/                    Operational database: the application's canonical store.
+database/core/migrations/          Versioned changes to the operational database schema.
+database/core/seeds/               Small, controlled reference datasets for the core database.
+database/core/tests/               Core database schema and integration tests.
+ingestion/tests/                  Ingestion unit and integration tests.
+dbt/h_intel/tests/                dbt data tests for analytical models.
+databricks/                       Databricks jobs and configuration for analytical data delivery.
+databricks/tests/                 Tests for Databricks jobs and data-delivery logic.
+infrastructure/                   Deployment and infrastructure configuration.
+infrastructure/tests/             Tests for infrastructure configuration.
+docs/architecture/                Architecture decisions, diagrams, and data-flow notes.
+
+Intended data flow
+------------------
+
+External sources -> ingestion -> core database -> Databricks -> dbt -> API -> website
+
+The flow is a target architecture, not a claim that every component is implemented.
+Keep source-specific ingestion logic in ingestion/ and analytical transformations
+in dbt/h_intel/. Keep tests in the corresponding component's tests/ directory.
+Add code to the planned areas as those components are built.

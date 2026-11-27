@@ -1,4 +1,5 @@
-"""Command-line entry point for the EPC ingestion pipeline.
+"""
+Command-line entry point for the EPC ingestion pipeline.
 
 The module supports both ``python -m`` execution and running this file
 directly from the repository. Direct execution needs the repository root on

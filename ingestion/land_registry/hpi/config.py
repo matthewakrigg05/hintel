@@ -52,3 +52,8 @@ LAND_REGISTRY_DATASETS = [
         "filename": "Repossession",
     }
 ]
+
+HPI_BASE_URL = (
+    "https://publicdata.landregistry.gov.uk/"
+    "market-trend-data/house-price-index-data"
+)

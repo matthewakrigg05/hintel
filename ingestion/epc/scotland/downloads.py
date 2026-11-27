@@ -1,11 +1,16 @@
-import json
 from datetime import datetime, timezone
 from pathlib import Path
 
 import py7zr
 
 from ingestion.common.download import calculate_sha256, download_file
-from ingestion.common.storage import data_root, prepare_dataset_dir
+from ingestion.common.storage import (
+    append_jsonl_event,
+    load_manifest,
+    prepare_dataset_dir,
+    update_manifest,
+    write_manifest,
+)
 
 from .config import SCOTLAND_DATASETS
 
@@ -16,22 +21,8 @@ def _dataset_dir(dataset: str) -> Path:
     return prepare_dataset_dir(dataset, "epc", "scotland")
 
 
-def _manifest_path(dataset: str) -> Path:
-    return _dataset_dir(dataset) / "manifest.json"
-
-
 def get_dataset_manifest(dataset: str) -> dict | None:
-    path = _manifest_path(dataset)
-    if not path.exists():
-        return None
-    return json.loads(path.read_text(encoding="utf-8"))
-
-
-def _write_manifest(dataset: str, details: dict) -> None:
-    path = _manifest_path(dataset)
-    temporary = path.with_suffix(".json.part")
-    temporary.write_text(json.dumps(details, indent=2) + "\n", encoding="utf-8")
-    temporary.replace(path)
+    return load_manifest(_dataset_dir(dataset))
 
 
 def save_downloaded_dataset(dataset: str, refresh: bool = False) -> Path:
@@ -72,7 +63,7 @@ def save_downloaded_dataset(dataset: str, refresh: bool = False) -> Path:
             "accepted_at": datetime.now(timezone.utc).isoformat(),
         }
         temporary.replace(destination)
-        _write_manifest(dataset, details)
+        write_manifest(dataset_dir, details)
         return destination
     except Exception:
         temporary.unlink(missing_ok=True)
@@ -90,19 +81,11 @@ def existing_raw_path(dataset: str) -> Path:
 
 
 def update_dataset_manifest(dataset: str, **details: object) -> dict:
-    manifest = get_dataset_manifest(dataset) or {}
-    manifest.update(details)
-    _write_manifest(dataset, manifest)
-    return manifest
+    return update_manifest(_dataset_dir(dataset), details)
 
 
 def append_run_log(status: str, **details: object) -> None:
-    log_path = data_root() / "epc" / "scotland" / "run_log.jsonl"
-    log_path.parent.mkdir(parents=True, exist_ok=True)
-    event = {
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-        "status": status,
-        **details,
-    }
-    with log_path.open("a", encoding="utf-8") as log:
-        log.write(json.dumps(event) + "\n")
+    append_jsonl_event(
+        ("epc", "scotland"),
+        {"status": status, **details},
+    )

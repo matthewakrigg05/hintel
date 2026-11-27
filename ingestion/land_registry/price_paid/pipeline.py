@@ -1,13 +1,16 @@
 import argparse
-from datetime import datetime, timezone
 from pathlib import Path
 
 import pandas as pd
 
 from ingestion.common.metadata import add_ingestion_metadata
 from ingestion.common.storage import prepare_dataset_dir
-from ingestion.destinations.databricks.audit import new_run_id, write_event
-from ingestion.destinations.databricks.databricks import RAW_CATALOG, RAW_SCHEMA, bronze_write
+from ingestion.destinations.databricks.audit import new_run_id, write_ingestion_event
+from ingestion.destinations.databricks.databricks import (
+    RAW_CATALOG,
+    RAW_SCHEMA,
+    write_bronze_batches,
+)
 
 from .config import (
     PRICE_PAID_BATCH_ROWS,
@@ -107,63 +110,47 @@ def run(download: bool = True) -> dict[int, pd.DataFrame]:
                 f"Loaded {len(frame):,} rows and {len(frame.columns):,} columns "
                 f"for {PRICE_PAID_DATASET_ID} {year}"
             )
-            write_result = {"row_count": 0}
-            batch_count = max(1, (len(frame) + PRICE_PAID_BATCH_ROWS - 1) // PRICE_PAID_BATCH_ROWS)
-            for batch_number, start in enumerate(
-                range(0, len(frame), PRICE_PAID_BATCH_ROWS),
-                start=1,
-            ):
-                batch = frame.iloc[start : start + PRICE_PAID_BATCH_ROWS]
-                print(
-                    f"Writing batch {batch_number}/{batch_count} for "
-                    f"{PRICE_PAID_DATASET_ID} {year}: {len(batch):,} rows",
-                    flush=True,
+            batches = (
+                (
+                    f"{year}-{batch_number}",
+                    frame.iloc[start : start + PRICE_PAID_BATCH_ROWS],
                 )
-                batch_result = bronze_write(
-                    batch,
-                    catalog=RAW_CATALOG,
-                    schema=RAW_SCHEMA,
-                    table=PRICE_PAID_DATASET_ID,
-                    key_cols=["_source_sha256"],
-                    batch_id=f"{year}-{batch_number}",
+                for batch_number, start in enumerate(
+                    range(0, len(frame), PRICE_PAID_BATCH_ROWS),
+                    start=1,
                 )
-                write_result["row_count"] += batch_result["row_count"]
-            _write_audit_event(
+            )
+            written_row_count = write_bronze_batches(
+                batches,
+                catalog=RAW_CATALOG,
+                schema=RAW_SCHEMA,
+                table=PRICE_PAID_DATASET_ID,
+                key_cols=["_source_sha256"],
+            )
+            write_ingestion_event(
                 run_id,
+                PRICE_PAID_DATASET_ID,
                 status,
-                period=frame.attrs.get("price_paid_period"),
-                row_count=write_result["row_count"],
-                source_url=manifest.get("url"),
-                file_size_bytes=manifest.get("file_size"),
-                sha256=manifest.get("sha256"),
+                source="land_registry_price_paid",
+                publication_period=frame.attrs.get("price_paid_period"),
+                manifest=manifest,
+                row_count=written_row_count,
             )
             append_run_log(run_id=run_id, status=status, period=str(year), row_count=len(frame))
             print(f"Completed {PRICE_PAID_DATASET_ID} {year}: {status}")
             results[year] = frame
         except Exception as error:
-            _write_audit_event(run_id, "failed", period=str(year), error=str(error))
+            write_ingestion_event(
+                run_id,
+                PRICE_PAID_DATASET_ID,
+                "failed",
+                source="land_registry_price_paid",
+                publication_period=str(year),
+                error_message=str(error),
+            )
             append_run_log(run_id=run_id, status="failed", period=str(year), error=str(error))
             raise
     return results
-
-
-def _write_audit_event(run_id: str, status: str, **details: object) -> None:
-    try:
-        write_event(
-            run_id,
-            PRICE_PAID_DATASET_ID,
-            status,
-            source="land_registry_price_paid",
-            publication_period=details.get("period"),
-            source_url=details.get("source_url"),
-            row_count=details.get("row_count"),
-            file_size_bytes=details.get("file_size_bytes"),
-            sha256=details.get("sha256"),
-            completed_at=datetime.now(timezone.utc),
-            error_message=details.get("error"),
-        )
-    except (ImportError, RuntimeError, OSError) as error:
-        print(f"Databricks audit unavailable; local log retained: {error}")
 
 
 def main() -> None:

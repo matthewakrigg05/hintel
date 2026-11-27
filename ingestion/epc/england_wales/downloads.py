@@ -1,34 +1,31 @@
 import csv
 import io
-import json
 import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
 
 from ingestion.common.download import calculate_sha256, download_file
 from ingestion.common.http import get_json
-from ingestion.common.storage import data_root, prepare_dataset_dir
+from ingestion.common.storage import (
+	append_jsonl_event,
+	data_root,
+	load_manifest,
+	prepare_dataset_dir,
+	write_manifest,
+)
 
-from .config import EPC_API_TOKEN, EPC_DATASET_IDS, EPC_DATASET_ID
-
-
-EPC_BASE_URL = "https://api.get-energy-performance-data.communities.gov.uk"
-EPC_DOMESTIC_CSV_URL = f"{EPC_BASE_URL}/api/files/domestic/csv"
-EPC_DOMESTIC_INFO_URL = f"{EPC_DOMESTIC_CSV_URL}/info"
-EPC_DATASET_URLS = {
-	"domestic": EPC_DOMESTIC_CSV_URL,
-	"non_domestic": f"{EPC_BASE_URL}/api/files/non-domestic/csv",
-}
+from .config import (
+	EPC_API_TOKEN,
+	EPC_DATASET_ID,
+	EPC_DATASET_IDS,
+	EPC_DATASET_URLS,
+)
 
 
 def _dataset_dir(dataset: str = "domestic") -> Path:
 	if dataset not in EPC_DATASET_IDS:
 		raise ValueError(f"Unsupported EPC dataset: {dataset}")
 	return prepare_dataset_dir(dataset, "epc", "england_wales")
-
-
-def _manifest_path(dataset: str = "domestic") -> Path:
-	return _dataset_dir(dataset) / "manifest.json"
 
 
 def _legacy_dataset_dir(dataset: str = "domestic") -> Path:
@@ -38,29 +35,20 @@ def _legacy_dataset_dir(dataset: str = "domestic") -> Path:
 
 
 def _load_manifest(dataset: str = "domestic") -> dict | None:
-	path = _manifest_path(dataset)
-	if not path.exists():
-		path = _legacy_dataset_dir(dataset) / "manifest.json"
-	if not path.exists():
-		return None
-	return json.loads(path.read_text(encoding="utf-8"))
+	manifest = load_manifest(_dataset_dir(dataset))
+	if manifest is not None:
+		return manifest
+	return load_manifest(_legacy_dataset_dir(dataset))
 
 
 def get_dataset_manifest(dataset: str = "domestic") -> dict | None:
 	return _load_manifest(dataset)
 
 
-def _write_manifest(details: dict, dataset: str = "domestic") -> None:
-	path = _manifest_path(dataset)
-	temporary = path.with_suffix(".json.part")
-	temporary.write_text(json.dumps(details, indent=2) + "\n", encoding="utf-8")
-	temporary.replace(path)
-
-
 def update_dataset_manifest(dataset: str = "domestic", **details: object) -> dict:
 	manifest = _load_manifest(dataset) or {}
 	manifest.update(details)
-	_write_manifest(manifest, dataset)
+	write_manifest(_dataset_dir(dataset), manifest)
 	return manifest
 
 
@@ -161,7 +149,7 @@ def save_downloaded_dataset(
 			"accepted_at": datetime.now(timezone.utc).isoformat(),
 		}
 		temporary.replace(destination)
-		_write_manifest(details, dataset)
+		write_manifest(dataset_dir, details)
 		return destination
 	except Exception:
 		temporary.unlink(missing_ok=True)
@@ -179,13 +167,7 @@ def existing_raw_path(dataset: str = "domestic") -> Path:
 
 
 def append_run_log(status: str, **details: object) -> None:
-	log_path = data_root() / "epc" / "england_wales" / "run_log.jsonl"
-	log_path.parent.mkdir(parents=True, exist_ok=True)
-	event = {
-		"timestamp": datetime.now(timezone.utc).isoformat(),
-		"dataset_id": EPC_DATASET_ID,
-		"status": status,
-		**details,
-	}
-	with log_path.open("a", encoding="utf-8") as log:
-		log.write(json.dumps(event) + "\n")
+	append_jsonl_event(
+		("epc", "england_wales"),
+		{"dataset_id": EPC_DATASET_ID, "status": status, **details},
+	)

@@ -8,3 +8,8 @@
 # Notebook caches
 **/.ipynb_checkpoints/
 __pycache__/
+
+# Local SQLite development databases
+*.sqlite
+*.sqlite3
+*.db

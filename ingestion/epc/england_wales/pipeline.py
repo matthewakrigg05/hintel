@@ -3,7 +3,6 @@ import os
 import re
 import sys
 import zipfile
-from datetime import datetime, timezone
 from pathlib import Path
 
 if __package__ in {None, ""}:
@@ -12,37 +11,19 @@ if __package__ in {None, ""}:
 import pandas as pd
 
 from ingestion.common.metadata import add_ingestion_metadata
-from ingestion.destinations.databricks.audit import new_run_id, write_event
-from ingestion.destinations.databricks.databricks import RAW_CATALOG, bronze_write
-
-if __package__ in {None, ""}:
-    from ingestion.epc.config import EPC_BATCH_ROWS, EPC_SCHEMA
-    from ingestion.epc.england_wales.config import (
-        EPC_DATASET_ID,
-        EPC_DATASET_IDS,
-    )
-    from ingestion.epc.england_wales.downloads import (
-        append_run_log,
-        existing_raw_path,
-        get_dataset_manifest,
-        get_full_load_info,
-        is_download_current,
-        save_downloaded_dataset,
-        update_dataset_manifest,
-    )
-else:
-    from ..config import EPC_BATCH_ROWS, EPC_SCHEMA
-    from .config import EPC_DATASET_ID, EPC_DATASET_IDS
-    from .downloads import (
-        append_run_log,
-        existing_raw_path,
-        get_dataset_manifest,
-        get_full_load_info,
-        is_download_current,
-        save_downloaded_dataset,
-        update_dataset_manifest,
-    )
-
+from ingestion.destinations.databricks.audit import new_run_id, write_ingestion_event
+from ingestion.destinations.databricks.databricks import RAW_CATALOG, write_bronze_batches
+from ingestion.epc.config import EPC_BATCH_ROWS, EPC_SCHEMA
+from ingestion.epc.england_wales.config import EPC_DATASET_IDS
+from ingestion.epc.england_wales.downloads import (
+    append_run_log,
+    existing_raw_path,
+    get_dataset_manifest,
+    get_full_load_info,
+    is_download_current,
+    save_downloaded_dataset,
+    update_dataset_manifest,
+)
 
 EPC_VOLUME_PATH = os.getenv(
     "DATABRICKS_EPC_RAW_VOLUME_PATH",
@@ -121,6 +102,7 @@ def ingest_archive(
                 f"{dataset_id}_{name}" if dataset == "domestic" else dataset_id
             )
             print(f"Processing EPC archive member {member_number}/{len(csv_members)}: {member.filename}")
+
             with archive.open(member) as source:
                 chunks = pd.read_csv(
                     source,
@@ -129,33 +111,30 @@ def ingest_archive(
                     chunksize=EPC_BATCH_ROWS,
                     low_memory=False,
                 )
-                for frame in chunks:
-                    batch_number += 1
-                    prepared = add_ingestion_metadata(
-                        frame,
-                        {
-                            "_source_dataset": source_dataset_id,
-                            "_source_file": f"{raw_path}!{member.filename}",
-                            "_source_sha256": checksum,
-                            "_publication_period": period,
-                        },
-                    )
-                    result = bronze_write(
-                        prepared,
-                        catalog=RAW_CATALOG,
-                        schema=EPC_SCHEMA,
-                        table=formats[name],
-                        key_cols=["_source_sha256"],
-                        batch_id=f"{member_number}-{batch_number}",
-                        volume_path=EPC_VOLUME_PATH,
-                    )
-                    row_counts[name] += result["row_count"]
-                    print(
-                        f"Wrote EPC batch {batch_number}: "
-                        f"{result['row_count']:,} rows "
-                        f"({name}: {row_counts[name]:,} total)",
-                        flush=True,
-                    )
+
+                def member_batches():
+                    nonlocal batch_number
+                    for frame in chunks:
+                        batch_number += 1
+                        prepared = add_ingestion_metadata(
+                            frame,
+                            {
+                                "_source_dataset": source_dataset_id,
+                                "_source_file": f"{raw_path}!{member.filename}",
+                                "_source_sha256": checksum,
+                                "_publication_period": period,
+                            },
+                        )
+                        yield f"{member_number}-{batch_number}", prepared
+
+                row_counts[name] += write_bronze_batches(
+                    member_batches(),
+                    catalog=RAW_CATALOG,
+                    schema=EPC_SCHEMA,
+                    table=formats[name],
+                    key_cols=["_source_sha256"],
+                    volume_path=EPC_VOLUME_PATH,
+                )
 
     if not any(row_counts.values()):
         raise ValueError(f"EPC {dataset} archive contained no data rows")
@@ -196,13 +175,14 @@ def run(download: bool = True, dataset: str = "domestic") -> dict[str, object]:
             audit_dataset_id = (
                 f"{dataset_id}_{name}" if dataset == "domestic" else dataset_id
             )
-            _write_audit_event(
+            write_ingestion_event(
                 run_id,
                 audit_dataset_id,
                 status,
                 row_count=dataset_row_count,
                 manifest=manifest,
                 source=dataset_id,
+                publication_period=manifest.get("last_updated"),
             )
         append_run_log(
             status,
@@ -227,52 +207,16 @@ def run(download: bool = True, dataset: str = "domestic") -> dict[str, object]:
             run_id=run_id,
             error=str(error),
         )
-        _write_audit_event(
+        write_ingestion_event(
             run_id,
             dataset_id,
             "failed",
             manifest=manifest,
-            error=str(error),
             source=dataset_id,
+            error_message=str(error),
+            publication_period=manifest.get("last_updated"),
         )
         raise
-
-
-def _write_audit_event(
-    run_id: str,
-    dataset_id: str,
-    status: str,
-    *,
-    row_count: int | None = None,
-    manifest: dict | None = None,
-    error: str | None = None,
-    source: str = EPC_DATASET_ID,
-) -> None:
-    manifest = manifest or {}
-    try:
-        write_event(
-            run_id,
-            dataset_id,
-            status,
-            source=source,
-            source_url=manifest.get("url"),
-            publication_period=manifest.get("last_updated"),
-            row_count=row_count,
-            file_size_bytes=manifest.get("file_size"),
-            sha256=manifest.get("sha256"),
-            completed_at=datetime.now(timezone.utc),
-            error_message=error,
-        )
-    except (ImportError, RuntimeError, OSError) as audit_error:
-        print(f"Databricks audit unavailable; local log retained: {audit_error}")
-    except Exception as audit_error:
-        try:
-            from databricks.sql.exc import Error as DatabricksError
-        except ImportError:
-            raise audit_error
-        if not isinstance(audit_error, DatabricksError):
-            raise
-        print(f"Databricks audit unavailable; local log retained: {audit_error}")
 
 
 def main() -> None:

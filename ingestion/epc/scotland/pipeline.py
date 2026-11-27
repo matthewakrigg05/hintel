@@ -2,7 +2,6 @@ import argparse
 import os
 import sys
 import tempfile
-from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath, PureWindowsPath
 
 if __package__ in {None, ""}:
@@ -12,27 +11,16 @@ import pandas as pd
 import py7zr
 
 from ingestion.common.metadata import add_ingestion_metadata
-from ingestion.destinations.databricks.audit import new_run_id, write_event
-from ingestion.destinations.databricks.databricks import RAW_CATALOG, bronze_write
-
-if __package__ in {None, ""}:
-    from ingestion.epc.scotland.config import EPC_BATCH_ROWS, EPC_SCHEMA, SCOTLAND_DATASETS
-    from ingestion.epc.scotland.downloads import (
-        append_run_log,
-        existing_raw_path,
-        get_dataset_manifest,
-        save_downloaded_dataset,
-        update_dataset_manifest,
-    )
-else:
-    from .config import EPC_BATCH_ROWS, EPC_SCHEMA, SCOTLAND_DATASETS
-    from .downloads import (
-        append_run_log,
-        existing_raw_path,
-        get_dataset_manifest,
-        save_downloaded_dataset,
-        update_dataset_manifest,
-    )
+from ingestion.destinations.databricks.audit import new_run_id, write_ingestion_event
+from ingestion.destinations.databricks.databricks import RAW_CATALOG, write_bronze_batches
+from ingestion.epc.scotland.config import EPC_BATCH_ROWS, EPC_SCHEMA, SCOTLAND_DATASETS
+from ingestion.epc.scotland.downloads import (
+    append_run_log,
+    existing_raw_path,
+    get_dataset_manifest,
+    save_downloaded_dataset,
+    update_dataset_manifest,
+)
 
 
 EPC_VOLUME_PATH = os.getenv(
@@ -96,73 +84,32 @@ def ingest_archive(raw_path: Path, manifest: dict, dataset: str) -> int:
                 chunksize=EPC_BATCH_ROWS,
                 low_memory=False,
             )
-            for batch_number, frame in enumerate(chunks, start=1):
-                prepared = add_ingestion_metadata(
-                    frame,
-                    {
-                        "_source_dataset": f"epc_scotland_{dataset}",
-                        "_source_file": f"{raw_path}!{member_path.name}",
-                        "_source_sha256": checksum,
-                        "_publication_period": manifest.get("last_updated"),
-                    },
+            metadata = {
+                "_source_dataset": f"epc_scotland_{dataset}",
+                "_source_file": f"{raw_path}!{member_path.name}",
+                "_source_sha256": checksum,
+                "_publication_period": manifest.get("last_updated"),
+            }
+            batches = (
+                (
+                    f"{member_number}-{batch_number}",
+                    add_ingestion_metadata(frame, metadata),
                 )
-                result = bronze_write(
-                    prepared,
-                    catalog=RAW_CATALOG,
-                    schema=EPC_SCHEMA,
-                    table=definition["table"],
-                    key_cols=["_source_sha256"],
-                    batch_id=f"{member_number}-{batch_number}",
-                    volume_path=EPC_VOLUME_PATH,
-                )
-                row_count += result["row_count"]
-                print(
-                    f"Wrote Scottish EPC batch {member_number}-{batch_number}: "
-                    f"{result['row_count']:,} rows "
-                    f"({row_count:,} total)",
-                    flush=True,
-                )
+                for batch_number, frame in enumerate(chunks, start=1)
+            )
+            row_count += write_bronze_batches(
+                batches,
+                catalog=RAW_CATALOG,
+                schema=EPC_SCHEMA,
+                table=definition["table"],
+                key_cols=["_source_sha256"],
+                volume_path=EPC_VOLUME_PATH,
+            )
     if not row_count:
         raise ValueError(f"Scottish EPC {dataset} archive contained no data rows")
 
     update_dataset_manifest(dataset, row_count=row_count)
     return row_count
-
-
-def _write_audit_event(
-    run_id: str,
-    dataset_id: str,
-    status: str,
-    *,
-    row_count: int | None = None,
-    manifest: dict | None = None,
-    error: str | None = None,
-) -> None:
-    manifest = manifest or {}
-    try:
-        write_event(
-            run_id,
-            dataset_id,
-            status,
-            source="epc_scotland",
-            source_url=manifest.get("url"),
-            publication_period=manifest.get("last_updated"),
-            row_count=row_count,
-            file_size_bytes=manifest.get("file_size"),
-            sha256=manifest.get("sha256"),
-            completed_at=datetime.now(timezone.utc),
-            error_message=error,
-        )
-    except (ImportError, RuntimeError, OSError) as audit_error:
-        print(f"Databricks audit unavailable; local log retained: {audit_error}")
-    except Exception as audit_error:
-        try:
-            from databricks.sql.exc import Error as DatabricksError
-        except ImportError:
-            raise audit_error
-        if not isinstance(audit_error, DatabricksError):
-            raise
-        print(f"Databricks audit unavailable; local log retained: {audit_error}")
 
 
 def run(
@@ -191,12 +138,14 @@ def run(
             count = ingest_archive(raw_path, manifest, name)
             row_counts[name] = count
             status = "success"
-            _write_audit_event(
+            write_ingestion_event(
                 run_id,
                 dataset_id,
                 status,
                 row_count=count,
                 manifest=manifest,
+                source="epc_scotland",
+                publication_period=manifest.get("last_updated"),
             )
             append_run_log(
                 status,
@@ -213,12 +162,14 @@ def run(
                 run_id=run_id,
                 error=str(error),
             )
-            _write_audit_event(
+            write_ingestion_event(
                 run_id,
                 dataset_id,
                 "failed",
                 manifest=manifest,
-                error=str(error),
+                source="epc_scotland",
+                publication_period=manifest.get("last_updated"),
+                error_message=str(error),
             )
             raise
     return row_counts

@@ -1,33 +1,19 @@
 import csv
-import hashlib
-import json
-from datetime import datetime, timezone
 from datetime import date
 from pathlib import Path
 from urllib.parse import urlparse
 
 import requests
 
-from ingestion.common.download import download_file
 from ingestion.common.http import get_json
-from ingestion.common.storage import data_root, prepare_dataset_dir
-
-from .config import LAND_REGISTRY_API_KEY
-
-
-HPI_BASE_URL = (
-    "https://publicdata.landregistry.gov.uk/"
-    "market-trend-data/house-price-index-data"
+from ingestion.common.storage import (
+    append_jsonl_event,
+    load_manifest,
+    prepare_dataset_dir,
 )
+from ingestion.land_registry.common import download_and_accept
 
-
-def _sha256(path: Path) -> str:
-    """Calculate the SHA-256 checksum of a local file."""
-    digest = hashlib.sha256()
-    with path.open("rb") as source:
-        for chunk in iter(lambda: source.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
+from .config import HPI_BASE_URL, LAND_REGISTRY_API_KEY
 
 
 def _csv_details(path: Path) -> tuple[list[str], int]:
@@ -39,19 +25,6 @@ def _csv_details(path: Path) -> tuple[list[str], int]:
     return columns, row_count
 
 
-def _manifest_path(dataset_dir: Path) -> Path:
-    """Return the path of the accepted-file manifest for a dataset."""
-    return dataset_dir / "manifest.json"
-
-
-def _load_manifest(dataset_dir: Path) -> dict | None:
-    """Load a dataset manifest, returning ``None`` before first acceptance."""
-    path = _manifest_path(dataset_dir)
-    if not path.exists():
-        return None
-    return json.loads(path.read_text(encoding="utf-8"))
-
-
 def is_download_current(dataset_id: str, source_url: str) -> bool:
     """Return whether the accepted raw CSV already matches a source URL.
 
@@ -59,7 +32,7 @@ def is_download_current(dataset_id: str, source_url: str) -> bool:
     makes a rerun safe when discovery returns the same published version.
     """
     dataset_dir = prepare_dataset_dir(dataset_id, "land_registry", "hpi")
-    manifest = _load_manifest(dataset_dir)
+    manifest = load_manifest(dataset_dir)
     return bool(
         manifest
         and (dataset_dir / "raw.csv").exists()
@@ -70,14 +43,7 @@ def is_download_current(dataset_id: str, source_url: str) -> bool:
 def get_dataset_manifest(dataset_id: str) -> dict | None:
     """Return the accepted manifest for a dataset, if one exists."""
     dataset_dir = prepare_dataset_dir(dataset_id, "land_registry", "hpi")
-    return _load_manifest(dataset_dir)
-
-
-def _write_manifest(dataset_dir: Path, details: dict) -> None:
-    """Atomically write metadata for the newly accepted raw file."""
-    temporary = _manifest_path(dataset_dir).with_suffix(".json.part")
-    temporary.write_text(json.dumps(details, indent=2) + "\n", encoding="utf-8")
-    temporary.replace(_manifest_path(dataset_dir))
+    return load_manifest(dataset_dir)
 
 
 def append_run_log(dataset_id: str, status: str, **details: object) -> None:
@@ -89,16 +55,10 @@ def append_run_log(dataset_id: str, status: str, **details: object) -> None:
         **details: Serializable event fields such as period, row count, or
             an error message.
     """
-    log_path = data_root() / "land_registry" / "hpi" / "run_log.jsonl"
-    log_path.parent.mkdir(parents=True, exist_ok=True)
-    event = {
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-        "dataset_id": dataset_id,
-        "status": status,
-        **details,
-    }
-    with log_path.open("a", encoding="utf-8") as log:
-        log.write(json.dumps(event) + "\n")
+    append_jsonl_event(
+        ("land_registry", "hpi"),
+        {"dataset_id": dataset_id, "status": status, **details},
+    )
 
 
 def candidate_periods(lookback: int = 24):
@@ -232,39 +192,24 @@ def save_downloaded_dataset(dataset_id: str, source_url: str, period: str | None
     download_url, file_type = resolve_download_url(source_url, headers=headers)
     dataset_dir = prepare_dataset_dir(dataset_id, "land_registry", "hpi")
     destination = dataset_dir / f"raw.{file_type}"
-    previous = _load_manifest(dataset_dir)
+    previous = load_manifest(dataset_dir)
     if previous and destination.exists() and previous.get("url") == download_url:
         print(f"Already retrieved {dataset_id} for {previous.get('period', download_url)}")
         return destination
 
-    temporary = destination.with_suffix(destination.suffix + ".candidate")
-
-    download_file(download_url, temporary, headers=headers)
-    columns, row_count = _csv_details(temporary)
-    previous_size = previous.get("file_size", 0) if previous else 0
-    previous_rows = previous.get("row_count", 0) if previous else 0
-
-    if not columns or row_count == 0:
-        temporary.unlink(missing_ok=True)
-        raise ValueError(f"Downloaded HPI file is empty: {download_url}")
-    if previous and temporary.stat().st_size < previous_size:
-        temporary.unlink(missing_ok=True)
-        raise ValueError(f"New HPI file is smaller than the accepted file: {download_url}")
-    if previous and row_count < previous_rows:
-        temporary.unlink(missing_ok=True)
-        raise ValueError(f"New HPI file has fewer rows than the accepted file: {download_url}")
-
-    details = {
-        "dataset_id": dataset_id,
-        "url": download_url,
-        "period": period,
-        "file_type": file_type,
-        "file_size": temporary.stat().st_size,
-        "row_count": row_count,
-        "columns": columns,
-        "sha256": _sha256(temporary),
-        "accepted_at": datetime.now(timezone.utc).isoformat(),
-    }
-    temporary.replace(destination)
-    _write_manifest(dataset_dir, details)
+    download_and_accept(
+        download_url,
+        destination,
+        manifest_path=dataset_dir / "manifest.json",
+        details={
+            "dataset_id": dataset_id,
+            "url": download_url,
+            "period": period,
+            "file_type": file_type,
+        },
+        previous_manifest=previous,
+        source_name="HPI",
+        inspect_file=_csv_details,
+        headers=headers,
+    )
     return destination
