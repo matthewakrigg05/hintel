@@ -14,7 +14,12 @@ from ingestion.common.storage import (
 	write_manifest,
 )
 
-from .config import *
+from .config import (
+	EPC_API_TOKEN,
+	EPC_DATASET_ID,
+	EPC_DATASET_IDS,
+	EPC_DATASET_URLS,
+)
 
 
 def _dataset_dir(dataset: str = "domestic") -> Path:

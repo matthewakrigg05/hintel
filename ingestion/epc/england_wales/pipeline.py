@@ -12,39 +12,18 @@ import pandas as pd
 
 from ingestion.common.metadata import add_ingestion_metadata
 from ingestion.destinations.databricks.audit import new_run_id, write_ingestion_event
-from ingestion.destinations.databricks.databricks import (
-    RAW_CATALOG,
-    write_bronze_batches,
+from ingestion.destinations.databricks.databricks import RAW_CATALOG, write_bronze_batches
+from ingestion.epc.config import EPC_BATCH_ROWS, EPC_SCHEMA
+from ingestion.epc.england_wales.config import EPC_DATASET_IDS
+from ingestion.epc.england_wales.downloads import (
+    append_run_log,
+    existing_raw_path,
+    get_dataset_manifest,
+    get_full_load_info,
+    is_download_current,
+    save_downloaded_dataset,
+    update_dataset_manifest,
 )
-
-if __package__ in {None, ""}:
-    from ingestion.epc.config import EPC_BATCH_ROWS, EPC_SCHEMA
-    from ingestion.epc.england_wales.config import (
-        EPC_DATASET_ID,
-        EPC_DATASET_IDS,
-    )
-    from ingestion.epc.england_wales.downloads import (
-        append_run_log,
-        existing_raw_path,
-        get_dataset_manifest,
-        get_full_load_info,
-        is_download_current,
-        save_downloaded_dataset,
-        update_dataset_manifest,
-    )
-else:
-    from ..config import EPC_BATCH_ROWS, EPC_SCHEMA
-    from .config import EPC_DATASET_ID, EPC_DATASET_IDS
-    from .downloads import (
-        append_run_log,
-        existing_raw_path,
-        get_dataset_manifest,
-        get_full_load_info,
-        is_download_current,
-        save_downloaded_dataset,
-        update_dataset_manifest,
-    )
-
 
 EPC_VOLUME_PATH = os.getenv(
     "DATABRICKS_EPC_RAW_VOLUME_PATH",
